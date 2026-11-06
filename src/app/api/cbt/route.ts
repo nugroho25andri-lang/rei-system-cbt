@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "@/lib/db";
+import { scoreEssay, type KeywordWeight } from "@/lib/keywords";
 import { cookieSecure, getAdminSession } from "@/lib/session";
 import { SignJWT, jwtVerify } from "jose";
 
@@ -9,6 +11,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const DAY5_FIELDS = ["smiling_voice", "intonasi", "artikulasi", "senyum_eye_contact", "body_language", "penyambutan_customer", "menanyakan_kepemilikan", "identitas_usia", "rekening_pribadi", "pengecekan_barang", "pembuatan_invoice", "surat_pernyataan", "penandatanganan_dokumen", "payment", "closing"];
+const ANSWER_FILE_TYPES: Record<string, string> = {
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-excel": "xls",
+  "application/pdf": "pdf",
+  "image/png": "png",
+};
+const ANSWER_FILE_EXTENSIONS: Record<string, string> = { xlsx: "xlsx", xls: "xls", pdf: "pdf", png: "png" };
+const ANSWER_FILE_MAX_BYTES = 8 * 1024 * 1024;
 
 function jsonError(message: string) {
   return NextResponse.json({ status: "error", message });
@@ -89,7 +99,7 @@ async function handle(request: Request) {
     const day = (url.searchParams.get("day") ?? "").trim();
     if (!day) return jsonError("Parameter day kosong");
     const [rows] = await db.execute("SELECT id,no_soal,pertanyaan,gambar,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) ORDER BY no_soal ASC", [day]);
-    const data = (rows as Array<{ id: number; no_soal: number; pertanyaan: string; gambar: string | null; bobot: number; waktu_soal: number; jenis_soal: string; pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null }>).map((row) => ({ ...row, jenis_soal: row.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : "esai", waktu_soal: Number(row.waktu_soal) || 0, gambar: imageUrl(row.gambar) }));
+    const data = (rows as Array<{ id: number; no_soal: number; pertanyaan: string; gambar: string | null; bobot: number; waktu_soal: number; jenis_soal: string; pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null }>).map((row) => ({ ...row, jenis_soal: row.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : row.jenis_soal === "upload" ? "upload" : "esai", waktu_soal: Number(row.waktu_soal) || 0, gambar: imageUrl(row.gambar) }));
     return data.length ? NextResponse.json({ status: "success", data }) : jsonError(`Tidak ada soal untuk: '${day}'`);
   }
 
@@ -135,6 +145,50 @@ async function handle(request: Request) {
     }
   }
 
+  if (request.method === "POST" && action === "upload_jawaban_file") {
+    const cookieHeader = request.headers.get("cookie") ?? "";
+    const ticket = cookieHeader.match(/(?:^|;\s*)cbt_exam_ticket=([^;]+)/)?.[1];
+    if (!ticket) return jsonError("Sesi token ujian tidak ditemukan. Silakan verifikasi token kembali.");
+    let ticketPayload;
+    try { ticketPayload = (await jwtVerify(decodeURIComponent(ticket), sessionKey())).payload; }
+    catch { return jsonError("Sesi token ujian kedaluwarsa. Silakan verifikasi token kembali."); }
+    if (ticketPayload.purpose !== "exam") return jsonError("Sesi token tidak valid untuk mengunggah berkas.");
+
+    let form: FormData;
+    try { form = await request.formData(); } catch { return jsonError("Berkas gagal dibaca. Silakan pilih ulang."); }
+    const file = form.get("file");
+    const day = String(form.get("day") ?? "").trim();
+    const noSoal = Number(form.get("no_soal"));
+    if (!day) return jsonError("Hari ujian tidak ditemukan.");
+    if (!Number.isInteger(noSoal) || noSoal <= 0) return jsonError("Nomor soal tidak valid.");
+    if (String(ticketPayload.day ?? "").toLowerCase() !== day.toLowerCase()) return jsonError("Sesi token tidak sesuai dengan ujian ini.");
+    if (!(file instanceof File) || file.size === 0) return jsonError("Pilih berkas jawaban terlebih dahulu.");
+    if (file.size > ANSWER_FILE_MAX_BYTES) return jsonError("Ukuran berkas maksimal 8 MB.");
+    const extension =
+      ANSWER_FILE_TYPES[file.type] ??
+      ANSWER_FILE_EXTENSIONS[String(file.name).split(".").pop()?.toLowerCase() ?? ""] ??
+      "";
+    if (!extension) return jsonError("Format berkas harus Excel (.xlsx/.xls), PDF, atau PNG.");
+
+    const participantId = Number(ticketPayload.participantId);
+    if (!Number.isInteger(participantId) || participantId <= 0) return jsonError("Peserta tidak sesuai dengan sesi ujian.");
+    const [questionRows] = await db.execute(
+      "SELECT id FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND no_soal=? AND jenis_soal='upload' LIMIT 1",
+      [day, noSoal],
+    );
+    const questionId = Number((questionRows as Array<{ id: number }>)[0]?.id ?? 0);
+    if (!questionId) return jsonError("Soal upload untuk nomor ini tidak ditemukan.");
+    try {
+      const directory = join(process.cwd(), "uploads", "jawaban");
+      await mkdir(directory, { recursive: true });
+      const fileName = `jawaban_${participantId}_${questionId}_${Date.now()}_${randomUUID().slice(0, 8)}.${extension}`;
+      await writeFile(join(directory, fileName), Buffer.from(await file.arrayBuffer()));
+      return NextResponse.json({ status: "success", message: "Berkas berhasil diunggah.", filePath: `uploads/jawaban/${fileName}`, fileName: String(file.name).slice(0, 180), size: file.size });
+    } catch {
+      return jsonError("Berkas gagal disimpan. Silakan coba lagi.");
+    }
+  }
+
   if (request.method === "POST" && action === "submit_jawaban") {
     let payload: Record<string, unknown>;
     try { payload = await request.json() as Record<string, unknown>; } catch { return jsonError("Payload tidak valid."); }
@@ -158,9 +212,29 @@ async function handle(request: Request) {
     if (!pesertaId) return jsonError("Peserta tidak ditemukan.");
     if (Number(ticketPayload.participantId) !== pesertaId) return jsonError("Peserta tidak sesuai dengan sesi ujian.");
 
-    const [questionRows] = await db.execute("SELECT id,no_soal,bobot,jenis_soal,jawaban_benar FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?))", [day]);
-    const questions = new Map<number, { id: number; bobot: number; multipleChoice: boolean; answerKey: string }>();
-    for (const row of questionRows as Array<{ id: number; no_soal: number; bobot: number; jenis_soal: string; jawaban_benar: string | null }>) questions.set(Number(row.no_soal), { id: Number(row.id), bobot: Number(row.bobot) || 0, multipleChoice: row.jenis_soal === "pilihan_ganda", answerKey: String(row.jawaban_benar ?? "").trim().toUpperCase() });
+    const [questionResult, keywordResult] = await Promise.all([
+      db.execute("SELECT id,no_soal,bobot,jenis_soal,jawaban_benar FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?))", [day]),
+      db.execute("SELECT k.id_soal,k.kata_kunci,k.bobot FROM soal_kata_kunci k INNER JOIN soal s ON s.id=k.id_soal WHERE LOWER(TRIM(s.day))=LOWER(TRIM(?))", [day]),
+    ]);
+    const questionRows = questionResult[0];
+    const keywordRows = keywordResult[0];
+    const keywordMap = new Map<number, KeywordWeight[]>();
+    for (const row of keywordRows as unknown as Array<{ id_soal: number; kata_kunci: string; bobot: number | string }>) {
+      const list = keywordMap.get(Number(row.id_soal)) ?? [];
+      list.push({ kata_kunci: row.kata_kunci, bobot: Number(row.bobot) || 0 });
+      keywordMap.set(Number(row.id_soal), list);
+    }
+    const questions = new Map<number, { id: number; bobot: number; multipleChoice: boolean; answerKey: string; keywords: KeywordWeight[] }>();
+    for (const row of questionRows as unknown as Array<{ id: number; no_soal: number; bobot: number; jenis_soal: string; jawaban_benar: string | null }>) {
+      const id = Number(row.id);
+      questions.set(Number(row.no_soal), {
+        id,
+        bobot: Number(row.bobot) || 0,
+        multipleChoice: row.jenis_soal === "pilihan_ganda",
+        answerKey: String(row.jawaban_benar ?? "").trim().toUpperCase(),
+        keywords: keywordMap.get(id) ?? [],
+      });
+    }
 
     const connection = await db.getConnection();
     try {
@@ -173,8 +247,21 @@ async function handle(request: Request) {
         const answerText = String(answer.jawabanPeserta ?? "").trim();
         let filePath: string | null = null;
         let savedAnswer = answerText;
+        const suppliedPath = String(answer.filePath ?? "").trim();
+        if (suppliedPath) {
+          const validPath = new RegExp(`^uploads/jawaban/jawaban_${pesertaId}_${question.id}_[A-Za-z0-9_-]+\\.(xlsx|xls|pdf|png)$`).test(suppliedPath);
+          if (validPath) {
+            try {
+              await access(join(process.cwd(), suppliedPath));
+              filePath = suppliedPath;
+              savedAnswer = `[File berhasil diunggah: ${String(answer.fileName ?? suppliedPath.split("/").pop() ?? "berkas")}]`;
+            } catch {
+              filePath = null;
+            }
+          }
+        }
         const dataUrl = answerText.match(/^data:[^;,]+;base64,([A-Za-z0-9+/=\r\n]+)$/);
-        if (dataUrl) {
+        if (!filePath && dataUrl) {
           const bytes = Buffer.from(dataUrl[1], "base64");
           if (bytes.length) {
             const ext = String(answer.fileName ?? "").match(/\.([a-z0-9]{1,8})$/i)?.[1]?.toLowerCase() ?? "bin";
@@ -188,7 +275,11 @@ async function handle(request: Request) {
           }
         }
         const selected = answerText.toUpperCase();
-        const score = question.multipleChoice ? (selected === question.answerKey ? question.bobot : 0) : 0;
+        const score = question.multipleChoice
+          ? (selected === question.answerKey ? question.bobot : 0)
+          : !filePath && question.keywords.length
+            ? scoreEssay(savedAnswer, question.keywords, question.bobot).score
+            : 0;
         await connection.execute("INSERT INTO jawaban_peserta (id_peserta,id_soal,jawaban,file_path,skor_auto,nilai,created_at) VALUES (?,?,?,?,?,?,NOW())", [pesertaId, question.id, savedAnswer || null, filePath, score, score]);
       }
       await connection.commit();

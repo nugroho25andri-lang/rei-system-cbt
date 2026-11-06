@@ -3,9 +3,20 @@ import { db } from "@/lib/db";
 import { getActiveAccessCodes } from "@/lib/access-codes";
 import { activityLabel, ACTIVITY_TONE } from "@/lib/activity";
 import { regenerateCodesAction } from "./actions";
-import { btnGhost, btnPrimary, Card, Notice, PageHeader, Stat } from "@/components/ui";
+import { savePesertaAction } from "../peserta/actions";
+import DeleteParticipantButton from "./delete-participant-button";
+import ScoreAnalytics from "./score-analytics";
+import { btnGhost, btnPrimary, Card, inputClass, Notice, PageHeader, Stat, TableWrap, tdClass, thClass } from "@/components/ui";
 
 type ActivityRow = { id: number; username: string; nama: string; role: string; action: string; detail: string; created_at: string | Date };
+type DashboardParticipant = { id: number; nip: string; nama_peserta: string; jabatan: string | null; batch: string; cabang: string | null; penempatan: string | null };
+const participantMessages: Record<string, string> = {
+  added: "Peserta baru berhasil ditambahkan.",
+  updated: "Data peserta berhasil diperbarui.",
+  deleted: "Peserta berhasil dihapus.",
+  invalid: "Data peserta belum lengkap atau tidak valid.",
+};
+const participantFields = ["nip", "nama_peserta", "jabatan", "batch", "cabang", "penempatan"] as const;
 
 function shortTime(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value);
@@ -13,9 +24,9 @@ function shortTime(value: string | Date) {
   return new Intl.DateTimeFormat("id-ID", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(date);
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ denied?: string; msg?: string }> }) {
   const session = await requireAdminSession();
-  const { denied } = await searchParams;
+  const { denied, msg } = await searchParams;
   const canManage = session.role === "superadmin" || session.role === "admin";
   const [questions, answers, kkmRows] = await Promise.all([
     db.execute("SELECT COUNT(*) AS total FROM soal"),
@@ -37,7 +48,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   let databaseTables = 0;
   let databaseSize = 0;
   let databaseVersion = "";
+  let dashboardParticipants: DashboardParticipant[] = [];
   if (isSuperadmin) {
+    const [participantRows] = await db.execute(
+      "SELECT id,nip,nama_peserta,jabatan,batch,cabang,penempatan FROM peserta ORDER BY id DESC LIMIT 8",
+    );
+    dashboardParticipants = participantRows as DashboardParticipant[];
     const [activityRows] = await db.execute(
       "SELECT id,username,nama,role,action,detail,created_at FROM admin_activity_log ORDER BY id DESC LIMIT 8",
     );
@@ -81,12 +97,77 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       />
 
       {denied && <Notice kind="error">Akun Anda tidak memiliki akses ke halaman tersebut.</Notice>}
+      {msg && participantMessages[msg] && <Notice kind={msg === "invalid" ? "error" : "success"}>{participantMessages[msg]}</Notice>}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Stat label="Total Soal" value={totalQuestions} hint="Seluruh bank soal" />
         <Stat label="Jawaban Masuk" value={totalAnswers.toLocaleString("id-ID")} hint="Baris jawaban peserta" />
         <Stat label="Standar KKM" value={kkm} hint="Batas kelulusan" />
       </div>
+
+      <ScoreAnalytics />
+
+      {isSuperadmin && (
+        <Card
+          title="Kelola Data Peserta"
+          description="Tambah, edit, dan hapus peserta langsung dari dashboard superadmin."
+          className="mb-6"
+          bodyClassName="px-5 pb-5 pt-4"
+        >
+          <form action={savePesertaAction} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <input type="hidden" name="return_to" value="dashboard" />
+            {participantFields.map((name) => (
+              <label key={name} className="grid gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-rei-900/55">
+                {name.replaceAll("_", " ")}
+                <input className={inputClass} name={name} required={name === "nip" || name === "nama_peserta" || name === "batch"} type={name === "batch" ? "number" : "text"} />
+              </label>
+            ))}
+            <div className="flex items-end sm:col-span-2 xl:col-span-4">
+              <button type="submit" className={btnPrimary}>Tambah Peserta</button>
+            </div>
+          </form>
+
+          <div className="mt-5">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-rei-900/45">Peserta terbaru ({dashboardParticipants.length})</p>
+            <TableWrap>
+              <thead className="border-b border-rei-900/10">
+                <tr>{["Peserta", "Batch", "Cabang", "Aksi"].map((head) => <th key={head} className={thClass}>{head}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-rei-900/10">
+                {dashboardParticipants.map((row) => (
+                  <tr key={row.id} className="hover:bg-gold-200/15">
+                    <td className={tdClass}>
+                      <span className="block font-semibold leading-tight">{row.nama_peserta}</span>
+                      <span className="font-mono text-[11px] text-rei-900/50">{row.nip}</span>
+                    </td>
+                    <td className={tdClass}>{row.batch}</td>
+                    <td className={tdClass}>{row.cabang || "-"}</td>
+                    <td className={tdClass}>
+                      <details className="group">
+                        <summary className="cursor-pointer text-xs font-bold text-gold-600 hover:text-gold-500">Edit</summary>
+                        <form action={savePesertaAction} className="mt-2 grid min-w-[260px] gap-2 rounded-xl border border-rei-900/10 bg-rei-100/50 p-3">
+                          <input type="hidden" name="action" value="edit" />
+                          <input type="hidden" name="id" value={row.id} />
+                          <input type="hidden" name="return_to" value="dashboard" />
+                          {participantFields.map((key) => (
+                            <label key={key} className="grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-rei-900/50">
+                              {key.replaceAll("_", " ")}
+                              <input className={inputClass} name={key} defaultValue={String(row[key] ?? "")} required={key === "nip" || key === "nama_peserta"} />
+                            </label>
+                          ))}
+                          <button type="submit" className={btnPrimary}>Simpan</button>
+                        </form>
+                      </details>
+                      <DeleteParticipantButton id={row.id} name={row.nama_peserta} />
+                    </td>
+                  </tr>
+                ))}
+                {!dashboardParticipants.length && <tr><td colSpan={4} className="px-3 py-8 text-center text-sm text-rei-900/50">Belum ada data peserta.</td></tr>}
+              </tbody>
+            </TableWrap>
+          </div>
+        </Card>
+      )}
 
       {isSuperadmin && (
         <>

@@ -102,7 +102,11 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
   ];
   return (
     <>
-      <PageHeader title="Rekapitulasi Nilai" description={`Monitoring hasil ujian peserta CBT REI · KKM 750`} />
+      <PageHeader
+        title="Rekapitulasi Nilai"
+        description={`Monitoring hasil ujian peserta CBT REI · KKM 750`}
+        actions={<a className={btnPrimary} href={`/rekapitulasi/export?${new URLSearchParams({ batch, q })}`}>Export Excel</a>}
+      />
       {params.saved === "1" && <Notice>Nilai berhasil disimpan.</Notice>}
 
       <Card className="mb-6">

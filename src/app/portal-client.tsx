@@ -7,7 +7,8 @@ type Question = { id?: number; no_soal: number; pertanyaan: string; gambar?: str
 type PaperOption = { value: string; label: string; text: string };
 type PaperQuestion = Question & { options: PaperOption[] };
 type Day5Aspect = { id: number; kategori: string; nomor: number; aspek_penilaian: string };
-type ExamAnswer = { noSoal: number; jenisSoal: string; bobot: number; skorAuto: number; fileName: string; jawabanPeserta: string };
+type ExamAnswer = { noSoal: number; jenisSoal: string; bobot: number; skorAuto: number; fileName: string; filePath: string; jawabanPeserta: string };
+type UploadedAnswer = { path: string; name: string; size: number };
 
 const days = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"];
 const day5Fields = ["smiling_voice","intonasi","artikulasi","senyum_eye_contact","body_language","penyambutan_customer","menanyakan_kepemilikan","identitas_usia","rekening_pribadi","pengecekan_barang","pembuatan_invoice","surat_pernyataan","penandatanganan_dokumen","payment","closing"];
@@ -153,6 +154,8 @@ export default function ExamPortal() {
   const [day5Scores, setDay5Scores] = useState<Record<string, number>>(() => Object.fromEntries(day5Fields.map((field) => [field, 5])));
   const [day5Notes, setDay5Notes] = useState<Record<string, string>>({});
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [fileAnswers, setFileAnswers] = useState<Record<number, UploadedAnswer>>({});
+  const [uploadingNo, setUploadingNo] = useState<number | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [toast, setToast] = useState("");
@@ -185,7 +188,7 @@ export default function ExamPortal() {
   const inExam = questions.length > 0 && !isDay5;
   const currentQuestion = paper[currentIndex];
   const currentValue = currentQuestion ? (answers[currentQuestion.no_soal] ?? "") : "";
-  const answeredCount = paper.filter((question) => (answers[question.no_soal] ?? "").trim() !== "").length;
+  const answeredCount = paper.filter((question) => (answers[question.no_soal] ?? "").trim() !== "" || Boolean(fileAnswers[question.no_soal])).length;
   const progress = paper.length ? Math.round((answeredCount / paper.length) * 100) : 0;
   const currentLimit = Number(currentQuestion?.waktu_soal ?? 0) || 0;
   const isLastQuestion = currentIndex >= paper.length - 1;
@@ -216,8 +219,9 @@ export default function ExamPortal() {
       jenisSoal: "text",
       bobot: Number(question.bobot) || 0,
       skorAuto: 0,
-      fileName: "",
-      jawabanPeserta: answers[question.no_soal] || "",
+      fileName: fileAnswers[question.no_soal]?.name ?? "",
+      filePath: fileAnswers[question.no_soal]?.path ?? "",
+      jawabanPeserta: answers[question.no_soal] || (fileAnswers[question.no_soal] ? `[Berkas: ${fileAnswers[question.no_soal].name}]` : ""),
     }));
     return JSON.stringify({ namaPeserta: participant.nama_peserta, nip: participant.nip, jabatan: participant.jabatan ?? "", batch: participant.batch ?? "", cabang: participant.cabang ?? "", day, listJawaban });
   }
@@ -241,6 +245,27 @@ export default function ExamPortal() {
     } finally {
       submittingRef.current = false;
       setBusy(false);
+    }
+  }
+
+  async function uploadAnswerFile(question: Question, file: File | undefined) {
+    if (!file || !participant || !day) return;
+    const noSoal = Number(question.no_soal);
+    setUploadingNo(noSoal); setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("day", day);
+      form.append("no_soal", String(noSoal));
+      const response = await fetch("/api/cbt?action=upload_jawaban_file", { method: "POST", body: form });
+      const result = await response.json();
+      if (result.status !== "success") throw new Error(result.message || "Berkas gagal diunggah.");
+      setFileAnswers((current) => ({ ...current, [noSoal]: { path: String(result.filePath), name: String(result.fileName || file.name), size: Number(result.size || file.size) } }));
+      setToast(`Berkas ${result.fileName || file.name} berhasil diunggah.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Berkas gagal diunggah.");
+    } finally {
+      setUploadingNo(null);
     }
   }
 
@@ -328,7 +353,7 @@ export default function ExamPortal() {
       const questionResponse = await fetch(`/api/cbt?action=get_soal&day=${encodeURIComponent(day)}`, { cache: "no-store" });
       const questionResult = await questionResponse.json(); if (questionResult.status !== "success") throw new Error(questionResult.message || "Soal tidak dapat dimuat.");
       finishedRef.current = false;
-      setQuestions(questionResult.data); setAnswers({}); setCurrentIndex(0); setTimeLeft(null); setToast(""); setSubmitted(false);
+      setQuestions(questionResult.data); setAnswers({}); setFileAnswers({}); setCurrentIndex(0); setTimeLeft(null); setToast(""); setSubmitted(false);
       window.scrollTo({ top: 0 });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal membuka ujian.");
@@ -361,7 +386,7 @@ export default function ExamPortal() {
 
   function restart() {
     setParticipantTerm(""); setParticipant(null); setEmail(""); setDay(""); setToken(""); setShowToken(false);
-    setQuestions([]); setDay5Aspects([]); setAnswers({}); setDay5Notes({}); setDay5Scores(Object.fromEntries(day5Fields.map((field) => [field, 5])));
+    setQuestions([]); setDay5Aspects([]); setAnswers({}); setFileAnswers({}); setUploadingNo(null); setDay5Notes({}); setDay5Scores(Object.fromEntries(day5Fields.map((field) => [field, 5])));
     setCurrentIndex(0); setTimeLeft(null); setToast(""); setSubmitted(false); setError(""); setMessage("");
     finishedRef.current = false; submittingRef.current = false;
     window.scrollTo({ top: 0 });
@@ -506,7 +531,7 @@ export default function ExamPortal() {
 
   /* ---------- Exam (one question at a time) ---------- */
   if (inExam && currentQuestion) {
-    const answeredNow = currentValue.trim() !== "";
+    const answeredNow = currentValue.trim() !== "" || Boolean(fileAnswers[currentQuestion.no_soal]);
     const urgent = currentLimit > 0 && (timeLeft ?? currentLimit) <= 10;
     const optionSelected = currentQuestion.jenis_soal === "pilihan_ganda" ? currentValue : "";
     return (
@@ -551,7 +576,7 @@ export default function ExamPortal() {
                   <p className="text-xs font-semibold text-rei-900/55">Bobot {currentQuestion.bobot}{currentLimit > 0 ? ` · ${currentLimit} detik` : " · bebas waktu"}</p>
                 </div>
                 <div className="ml-auto flex items-center gap-2">
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${currentQuestion.jenis_soal === "pilihan_ganda" ? "bg-rei-900 text-gold-300" : "bg-rei-100 text-rei-900/60"}`}>{currentQuestion.jenis_soal === "pilihan_ganda" ? "Pilihan ganda" : "Esai"}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${currentQuestion.jenis_soal === "pilihan_ganda" ? "bg-rei-900 text-gold-300" : currentQuestion.jenis_soal === "upload" ? "bg-emerald-100 text-emerald-700" : "bg-rei-100 text-rei-900/60"}`}>{currentQuestion.jenis_soal === "pilihan_ganda" ? "Pilihan ganda" : currentQuestion.jenis_soal === "upload" ? "Upload berkas" : "Esai"}</span>
                   <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${answeredNow ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                     {answeredNow ? <><CheckIcon className="h-3 w-3" /> Terjawab</> : "Belum dijawab"}
                   </span>
@@ -575,6 +600,32 @@ export default function ExamPortal() {
                         </label>
                       );
                     })}
+                  </div>
+                ) : currentQuestion.jenis_soal === "upload" ? (
+                  <div className="mt-5">
+                    <div className={`rounded-2xl border-2 border-dashed p-4 transition ${fileAnswers[currentQuestion.no_soal] ? "border-emerald-400 bg-emerald-50/60" : "border-rei-900/15 bg-[#faf8fa]"}`}>
+                      {fileAnswers[currentQuestion.no_soal] ? (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><CheckIcon className="h-5 w-5" /></span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-rei-900">{fileAnswers[currentQuestion.no_soal].name}</p>
+                            <p className="text-[11px] text-rei-900/50">{(fileAnswers[currentQuestion.no_soal].size / 1024 / 1024).toFixed(2)} MB · berhasil diunggah</p>
+                          </div>
+                          <label className="cursor-pointer rounded-lg border border-rei-900/15 bg-white px-3 py-1.5 text-xs font-bold text-rei-900 transition hover:border-gold-400">
+                            Ganti berkas
+                            <input type="file" className="sr-only" accept=".xlsx,.xls,.pdf,.png" onChange={(event) => void uploadAnswerFile(currentQuestion, event.target.files?.[0])} disabled={uploadingNo === currentQuestion.no_soal} />
+                          </label>
+                        </div>
+                      ) : (
+                        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 py-6 text-center">
+                          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gold-200/60 text-rei-900"><ArrowIcon /></span>
+                          <span className="text-sm font-bold text-rei-900">{uploadingNo === currentQuestion.no_soal ? "Mengunggah berkas…" : "Klik untuk memilih berkas jawaban"}</span>
+                          <span className="text-[11px] text-rei-900/45">Excel (.xlsx/.xls), PDF, atau PNG · maksimal 8 MB</span>
+                          <input type="file" className="sr-only" accept=".xlsx,.xls,.pdf,.png" onChange={(event) => void uploadAnswerFile(currentQuestion, event.target.files?.[0])} disabled={uploadingNo === currentQuestion.no_soal} />
+                        </label>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[11px] text-rei-900/45">Unggah berkas terlebih dahulu, lalu tekan {isLastQuestion ? "Kirim Jawaban" : "Lanjut"}. Pastikan berkas sudah benar sebelum dikirim.</p>
                   </div>
                 ) : (
                   <div className="mt-5">
@@ -610,7 +661,7 @@ export default function ExamPortal() {
                   <p className="mt-2 text-xs text-white/45">{answeredCount} dari {paper.length} soal terjawab</p>
                   <div className="mt-4 grid grid-cols-5 gap-1.5">
                     {paper.map((question, index) => {
-                      const filled = (answers[question.no_soal] ?? "").trim() !== "";
+                      const filled = (answers[question.no_soal] ?? "").trim() !== "" || Boolean(fileAnswers[question.no_soal]);
                       const active = index === currentIndex;
                       return (
                         <span key={`${question.no_soal}-${index}`} aria-label={`Soal ${index + 1}${filled ? " terjawab" : ""}`}

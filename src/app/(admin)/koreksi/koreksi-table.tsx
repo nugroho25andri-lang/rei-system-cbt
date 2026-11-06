@@ -8,7 +8,7 @@ export type KoreksiRow = { id_peserta: number; nama_peserta: string; nip: string
 type Peserta = { id: number; nama_peserta: string; nip: string; batch: string; jabatan: string | null; cabang: string | null };
 type Question = {
   id_soal: number; no_soal: number; day: string; pertanyaan: string; bobot: number; jenis_soal: string | null;
-  pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null; jawaban_benar: string | null; kata_kunci: string | null;
+  pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null; jawaban_benar: string | null; kata_kunci: string | null; kata_kunci_bobot: string | null;
   id_jawaban: number | null; jawaban: string | null; file_path: string | null; skor_auto: number | null; nilai: number | null; is_dikoreksi: number | null; catatan_koreksi: string | null;
 };
 type Summary = { answered: number; corrected: number; total: number; totalFinal: number; totalAuto: number; totalBobot: number };
@@ -195,7 +195,8 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
                             {question.jawaban ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-rei-900/85">{question.jawaban}</p> : <p className="text-sm italic text-rei-900/35">Tidak ada jawaban.</p>}
                             {question.file_path && <a className="mt-1 inline-block text-xs font-bold text-gold-600 hover:text-gold-500" href={`/uploads/${question.file_path.replace(/^\/?uploads\//, "")}`} target="_blank" rel="noreferrer">Lihat lampiran →</a>}
                             {isMcq && question.id_jawaban !== null && <p className={`mt-1 text-[11px] font-bold ${isCorrect ? "text-emerald-700" : "text-rose-700"}`}>{isCorrect ? "Sesuai kunci." : "Tidak sesuai kunci."}</p>}
-                            {!isMcq && question.kata_kunci && <p className="mt-1 text-[11px] text-rei-900/50"><b>Kata kunci:</b> {question.kata_kunci}</p>}
+                            {!isMcq && (question.kata_kunci_bobot || question.kata_kunci) && <p className="mt-1 text-[11px] text-rei-900/50"><b>Kata kunci:</b> {question.kata_kunci_bobot || question.kata_kunci}</p>}
+                            {!isMcq && Number(question.skor_auto) > 0 && <p className="mt-0.5 text-[11px] font-semibold text-emerald-700">Nilai otomatis dari kata kunci: {Number(question.skor_auto)}</p>}
                           </div>
 
                           <div className="mt-2 grid gap-2 sm:grid-cols-[120px_1fr]">

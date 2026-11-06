@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = { serverExternalPackages: ["mysql2"], turbopack: { root: process.cwd() } };
+const nextConfig: NextConfig = {
+  serverExternalPackages: ["mysql2", "exceljs"],
+  turbopack: { root: process.cwd() },
+  experimental: { serverActions: { bodySizeLimit: "8mb" } },
+};
 nextConfig.redirects = async () => [
   { source: "/index.php", destination: "/", permanent: false },
   { source: "/login.php", destination: "/login", permanent: false },

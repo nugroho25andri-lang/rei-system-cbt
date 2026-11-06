@@ -1,11 +1,15 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { Pool, PoolConnection } from "mysql2/promise";
 import { logAdminActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
+import { parseKeywordText, type KeywordWeight } from "@/lib/keywords";
+import { QuestionImageException, removeQuestionImage, storeQuestionImage } from "@/lib/question-image";
 import { requireRole } from "@/lib/session";
 
 const CHOICE_FIELDS = ["pilihan_a", "pilihan_b", "pilihan_c", "pilihan_d"] as const;
+type QuestionType = "esai" | "pilihan_ganda" | "upload";
 
 export type BulkState = { ok: boolean; message: string } | null;
 
@@ -16,25 +20,38 @@ async function questionColumn() {
 }
 
 type Normalized =
-  | { error: "invalid" | "pg-lengkap" | "pg-kunci" }
-  | { error: ""; day: string; noSoal: number; pertanyaan: string; keywords: string; bobot: number; waktuSoal: number; jenis: "esai" | "pilihan_ganda"; choices: string[]; answerKey: string };
+  | { error: "invalid" | "pg-lengkap" | "pg-kunci" | "keyword-bobot" }
+  | { error: ""; day: string; noSoal: number; pertanyaan: string; keywords: string; keywordList: KeywordWeight[]; bobot: number; waktuSoal: number; jenis: QuestionType; choices: string[]; answerKey: string };
+
+function normalizeKeywords(input: Record<string, unknown>, bobot: number): KeywordWeight[] {
+  if (Array.isArray(input.keyword_list)) {
+    return (input.keyword_list as Array<Record<string, unknown>>)
+      .map((item) => ({ kata_kunci: String(item?.kata_kunci ?? "").trim(), bobot: Number(item?.bobot) }))
+      .filter((item) => item.kata_kunci)
+      .map((item) => ({ kata_kunci: item.kata_kunci, bobot: Number.isFinite(item.bobot) && item.bobot > 0 ? Math.round(item.bobot * 100) / 100 : 1 }));
+  }
+  return parseKeywordText(String(input.kata_kunci ?? ""), bobot);
+}
 
 function normalize(input: Record<string, unknown>): Normalized {
   const day = String(input.day ?? "").trim() || "Day 1";
   const noSoal = Math.trunc(Number(input.no_soal));
   const pertanyaan = String(input.pertanyaan ?? "").trim();
-  const keywords = String(input.kata_kunci ?? "").trim();
   const bobot = Math.trunc(Number(input.bobot));
   const waktuSoal = Math.trunc(Number(input.waktu_soal ?? 0));
-  const jenis = input.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" as const : "esai" as const;
+  const jenis: QuestionType = input.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : input.jenis_soal === "upload" ? "upload" : "esai";
   const choices = CHOICE_FIELDS.map((field) => String(input[field] ?? "").trim());
   const answerKey = String(input.jawaban_benar ?? "").trim().toUpperCase();
+  const keywordList = jenis === "esai" && Number.isFinite(bobot) && bobot > 0 ? normalizeKeywords(input, bobot) : [];
 
   if (!pertanyaan || !Number.isInteger(noSoal) || noSoal <= 0 || !Number.isInteger(bobot) || bobot <= 0) return { error: "invalid" };
   if (!Number.isInteger(waktuSoal) || waktuSoal < 0 || waktuSoal > 86400) return { error: "invalid" };
   if (jenis === "pilihan_ganda" && choices.some((choice) => !choice)) return { error: "pg-lengkap" };
   if (jenis === "pilihan_ganda" && !["A", "B", "C", "D"].includes(answerKey)) return { error: "pg-kunci" };
-  return { error: "", day, noSoal, pertanyaan, keywords, bobot, waktuSoal, jenis, choices, answerKey };
+  const keywordTotal = keywordList.reduce((sum, item) => sum + item.bobot, 0);
+  if (jenis === "esai" && keywordTotal > bobot + 0.001) return { error: "keyword-bobot" };
+  const keywords = keywordList.map((item) => item.kata_kunci).join(", ");
+  return { error: "", day, noSoal, pertanyaan, keywords, keywordList, bobot, waktuSoal, jenis, choices, answerKey };
 }
 
 function inputFromForm(form: FormData): Record<string, unknown> {
@@ -42,32 +59,60 @@ function inputFromForm(form: FormData): Record<string, unknown> {
   for (const field of ["day", "no_soal", "pertanyaan", "kata_kunci", "bobot", "waktu_soal", "jenis_soal", "jawaban_benar", ...CHOICE_FIELDS]) {
     input[field] = form.get(field);
   }
+  const names = form.getAll("kata_kunci[]").map((value) => String(value).trim());
+  const weights = form.getAll("bobot_kata_kunci[]").map((value) => Number(String(value).replace(",", ".")));
+  const pairs = names
+    .map((name, index) => ({ kata_kunci: name, bobot: Number.isFinite(weights[index]) && weights[index] > 0 ? weights[index] : 1 }))
+    .filter((item) => item.kata_kunci);
+  if (pairs.length) input.keyword_list = pairs;
   return input;
 }
 
-function params(question: Extract<Normalized, { error: "" }>) {
+function params(question: Extract<Normalized, { error: "" }>, gambar: string | null) {
   return [
     question.day,
     question.noSoal,
     question.pertanyaan,
-    question.jenis === "pilihan_ganda" ? "" : question.keywords,
+    question.jenis === "esai" ? question.keywords : "",
     question.bobot,
     question.waktuSoal,
     question.jenis,
     ...(question.jenis === "pilihan_ganda" ? question.choices : [null, null, null, null]),
     question.jenis === "pilihan_ganda" ? question.answerKey : null,
+    gambar,
   ];
+}
+
+async function replaceKeywords(exec: Pool | PoolConnection, questionId: number, keywords: KeywordWeight[]) {
+  await exec.execute("DELETE FROM soal_kata_kunci WHERE id_soal=?", [questionId]);
+  for (const keyword of keywords) {
+    await exec.execute("INSERT INTO soal_kata_kunci (id_soal,kata_kunci,bobot) VALUES (?,?,?)", [questionId, keyword.kata_kunci, keyword.bobot]);
+  }
+}
+
+async function readImage(form: FormData): Promise<string | null | "gambar-tipe" | "gambar-ukuran" | "gambar-gagal"> {
+  const file = form.get("gambar");
+  if (!(file instanceof File) || file.size === 0) return null;
+  try {
+    return await storeQuestionImage(file);
+  } catch (error) {
+    return error instanceof QuestionImageException ? error.code : "gambar-gagal";
+  }
 }
 
 export async function addSoalAction(form: FormData) {
   const session = await requireRole(["superadmin", "admin", "hr_staff"]);
   const question = normalize(inputFromForm(form));
   if (question.error) redirect(`/kelola-soal?msg=${question.error}`);
+  const gambar = await readImage(form);
+  if (gambar && ["gambar-tipe", "gambar-ukuran", "gambar-gagal"].includes(gambar)) redirect(`/kelola-soal?msg=${gambar}`);
   const column = await questionColumn();
   const [result] = await db.execute(
-    `INSERT INTO soal (day,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    params(question),
+    `INSERT INTO soal (day,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    params(question, gambar),
   );
+  const insertedId = Number((result as { insertId?: number }).insertId ?? 0);
+  if (insertedId > 0 && question.keywordList.length) await replaceKeywords(db, insertedId, question.keywordList);
   await logAdminActivity({
     action: "question_create",
     session,
@@ -85,11 +130,27 @@ export async function updateSoalAction(form: FormData) {
   if (!Number.isInteger(id) || id <= 0) redirect("/kelola-soal?msg=invalid");
   const question = normalize(inputFromForm(form));
   if (question.error) redirect(`/kelola-soal?msg=${question.error}`);
+
+  const [existingRows] = await db.execute("SELECT gambar FROM soal WHERE id=? LIMIT 1", [id]);
+  const oldImage = (existingRows as Array<{ gambar: string | null }>)[0]?.gambar ?? null;
+  const uploaded = await readImage(form);
+  if (uploaded && ["gambar-tipe", "gambar-ukuran", "gambar-gagal"].includes(uploaded)) redirect(`/kelola-soal?msg=${uploaded}`);
+  const removeImage = String(form.get("hapus_gambar") ?? "") === "1";
+  let gambar = oldImage;
+  if (uploaded) {
+    gambar = uploaded;
+    if (oldImage) await removeQuestionImage(oldImage);
+  } else if (removeImage) {
+    gambar = null;
+    if (oldImage) await removeQuestionImage(oldImage);
+  }
+
   const column = await questionColumn();
   await db.execute(
-    `UPDATE soal SET day=?,no_soal=?,\`${column}\`=?,kata_kunci=?,bobot=?,waktu_soal=?,jenis_soal=?,pilihan_a=?,pilihan_b=?,pilihan_c=?,pilihan_d=?,jawaban_benar=? WHERE id=?`,
-    [...params(question), id],
+    `UPDATE soal SET day=?,no_soal=?,\`${column}\`=?,kata_kunci=?,bobot=?,waktu_soal=?,jenis_soal=?,pilihan_a=?,pilihan_b=?,pilihan_c=?,pilihan_d=?,jawaban_benar=?,gambar=? WHERE id=?`,
+    [...params(question, gambar), id],
   );
+  await replaceKeywords(db, id, question.keywordList);
   await logAdminActivity({
     action: "question_update",
     session,
@@ -105,6 +166,7 @@ const bulkErrors: Record<string, string> = {
   invalid: "lengkapi pertanyaan, nomor soal, bobot, dan waktu soal (0–86400 detik).",
   "pg-lengkap": "pilihan A sampai D wajib diisi.",
   "pg-kunci": "kunci jawaban wajib A, B, C, atau D.",
+  "keyword-bobot": "total bobot kata kunci tidak boleh melebihi bobot soal.",
 };
 
 export async function addManySoalAction(_previous: BulkState, form: FormData): Promise<BulkState> {
@@ -131,10 +193,12 @@ export async function addManySoalAction(_previous: BulkState, form: FormData): P
   try {
     await connection.beginTransaction();
     for (const question of questions) {
-      await connection.execute(
-        `INSERT INTO soal (day,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        params(question),
+      const [inserted] = await connection.execute(
+        `INSERT INTO soal (day,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        params(question, null),
       );
+      const keywordQuestionId = Number((inserted as { insertId?: number }).insertId ?? 0);
+      if (keywordQuestionId > 0 && question.keywordList.length) await replaceKeywords(connection, keywordQuestionId, question.keywordList);
     }
     await connection.commit();
   } catch (error) {
@@ -158,9 +222,11 @@ export async function deleteSoalAction(form: FormData) {
   const session = await requireRole(["superadmin", "admin", "hr_staff"]);
   const id = Number(form.get("id"));
   if (!Number.isInteger(id) || id <= 0) return;
-  const [rows] = await db.execute("SELECT day,no_soal,pertanyaan FROM soal WHERE id = ? LIMIT 1", [id]);
-  const question = (rows as Array<{ day: string; no_soal: number; pertanyaan: string }>)[0];
+  const [rows] = await db.execute("SELECT day,no_soal,pertanyaan,gambar FROM soal WHERE id = ? LIMIT 1", [id]);
+  const question = (rows as Array<{ day: string; no_soal: number; pertanyaan: string; gambar: string | null }>)[0];
+  await db.execute("DELETE FROM soal_kata_kunci WHERE id_soal = ?", [id]);
   await db.execute("DELETE FROM soal WHERE id = ?", [id]);
+  await removeQuestionImage(question?.gambar);
   await logAdminActivity({
     action: "question_delete",
     session,

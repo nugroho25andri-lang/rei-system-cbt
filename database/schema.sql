@@ -1156,7 +1156,7 @@ CREATE TABLE `soal` (
   `kata_kunci` text NOT NULL,
   `bobot` int DEFAULT '1',
   `waktu_soal` int NOT NULL DEFAULT '0',
-  `jenis_soal` enum('esai','pilihan_ganda') NOT NULL DEFAULT 'esai',
+  `jenis_soal` enum('esai','pilihan_ganda','upload') NOT NULL DEFAULT 'esai',
   `pilihan_a` text,
   `pilihan_b` text,
   `pilihan_c` text,
@@ -1167,6 +1167,25 @@ CREATE TABLE `soal` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `soal_kata_kunci`
+--
+
+DROP TABLE IF EXISTS `soal_kata_kunci`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `soal_kata_kunci` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `id_soal` int NOT NULL,
+  `kata_kunci` varchar(191) NOT NULL,
+  `bobot` decimal(10,2) NOT NULL DEFAULT '1.00',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_soal_kata_kunci` (`id_soal`),
+  CONSTRAINT `fk_soal_kata_kunci_soal` FOREIGN KEY (`id_soal`) REFERENCES `soal` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --

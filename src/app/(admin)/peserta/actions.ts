@@ -11,8 +11,9 @@ function fields(form: FormData) {
 }
 export async function savePesertaAction(form: FormData) {
   const session = await requireAdmin();
+  const returnTo = form.get("return_to") === "dashboard" ? "/admin" : "/peserta";
   const [nip, nama, jabatan, batch, cabang, penempatan] = fields(form);
-  if (!nip || !nama || !Number.isFinite(batch)) redirect("/peserta?msg=invalid");
+  if (!nip || !nama || !Number.isFinite(batch)) redirect(`${returnTo}?msg=invalid`);
   if (form.get("action") === "edit") {
     const id = Number(form.get("id"));
     await db.execute("UPDATE peserta SET nip=?, nama_peserta=?, jabatan=?, batch=?, cabang=?, penempatan=? WHERE id=?", [nip, nama, jabatan, batch, cabang, penempatan, id]);
@@ -23,7 +24,8 @@ export async function savePesertaAction(form: FormData) {
       entityId: id,
       detail: `Peserta ${nama} (NIP ${nip}) diperbarui.`,
     });
-    redirect("/peserta?msg=updated");
+    revalidatePath("/admin");
+    redirect(`${returnTo}?msg=updated`);
   }
   const [result] = await db.execute("INSERT INTO peserta (nip,nama_peserta,jabatan,batch,cabang,penempatan) VALUES (?,?,?,?,?,?)", [nip, nama, jabatan, batch, cabang, penempatan]);
   await logAdminActivity({
@@ -33,7 +35,8 @@ export async function savePesertaAction(form: FormData) {
     entityId: (result as { insertId?: number }).insertId ?? null,
     detail: `Peserta ${nama} (NIP ${nip}) ditambahkan.`,
   });
-  redirect("/peserta?msg=added");
+  revalidatePath("/admin");
+  redirect(`${returnTo}?msg=added`);
 }
 export async function deletePesertaAction(form: FormData) {
   const session = await requireAdmin();
@@ -49,6 +52,8 @@ export async function deletePesertaAction(form: FormData) {
     detail: participant ? `Peserta ${participant.nama_peserta} (NIP ${participant.nip}) dihapus.` : `Peserta id ${id} dihapus.`,
   });
   revalidatePath("/peserta");
+  revalidatePath("/admin");
+  if (form.get("return_to") === "dashboard") redirect("/admin?msg=deleted");
 }
 function parseCsvLine(line: string) {
   const values: string[] = []; let value = ""; let quoted = false;

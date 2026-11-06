@@ -27,6 +27,7 @@ export async function GET(request: Request) {
 
   const [questionRows] = await db.execute(
     `SELECT s.id AS id_soal,s.no_soal,s.day,s.pertanyaan,s.bobot,s.jenis_soal,s.pilihan_a,s.pilihan_b,s.pilihan_c,s.pilihan_d,s.jawaban_benar,s.kata_kunci,
+      (SELECT GROUP_CONCAT(CONCAT(k.kata_kunci,' (',k.bobot,')') ORDER BY k.id SEPARATOR ', ') FROM soal_kata_kunci k WHERE k.id_soal=s.id) AS kata_kunci_bobot,
       jp.id AS id_jawaban,jp.jawaban,jp.file_path,jp.skor_auto,jp.nilai,jp.is_dikoreksi,jp.catatan_koreksi
      FROM soal s
      LEFT JOIN jawaban_peserta jp ON jp.id=(SELECT MAX(jp2.id) FROM jawaban_peserta jp2 WHERE jp2.id_soal=s.id AND jp2.id_peserta=?)

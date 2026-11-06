@@ -130,7 +130,7 @@ export default function BulkQuestionForm({ days, nextNumbers }: { days: string[]
                 </>
               ) : (
                 <label className={`${label} sm:col-span-2 lg:col-span-5`}>Kata kunci
-                  <input className={inputClass} value={row.kata_kunci} onChange={(event) => update(row.key, "kata_kunci", event.target.value)} placeholder="Pisahkan dengan koma" />
+                  <input className={inputClass} value={row.kata_kunci} onChange={(event) => update(row.key, "kata_kunci", event.target.value)} placeholder="Pisahkan dengan koma, mis. materai:3, nota:2, tanggal. Tanpa bobot = dibagi rata." />
                 </label>
               )}
             </div>
