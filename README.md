@@ -89,6 +89,8 @@ schtasks /Query /TN "CBT REI - Backup Database" /V /FO LIST
 
 Script backup membaca kredensial dari `.env.local`, mencari `mysqldump.exe` di Laragon/XAMPP/PATH, lalu menulis log ke `C:\backupdata-cbt_rei\backup.log`.
 
+Jika folder project dipindah atau di-clone ulang, jalankan `npm install` atau `npm run setup:backup` lagi agar path task menunjuk ke folder terbaru.
+
 Tanpa hak Administrator, task berjalan sebagai user Windows dan hanya aktif saat user login. Untuk server yang menyala 24/7, jalankan dari PowerShell **sebagai Administrator**:
 
 ```powershell
