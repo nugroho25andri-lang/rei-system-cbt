@@ -1,0 +1,34 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+npm-debug.log*
+*.log
+
+# Data peserta dan lampiran tidak boleh masuk repository
+uploads/*
+!uploads/.gitkeep
+
+# Hasil backup lokal
+*.zip
+backup/
+
+# Aplikasi PHP lama, tidak dipakai oleh Next.js
+/*.php
+/.htaccess
+/after_training.v1/
+/api/
+/cache/
+/employe/
+/includes/
+/testing/
+/uploads_foto_day1/
+/view/
+/kode_akses.json
+/setup-server.md
+/ejs_ai_migration.sql
+

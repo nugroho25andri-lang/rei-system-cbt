@@ -1,0 +1,32 @@
+{
+  "name": "rei-system-cbt",
+  "version": "1.0.0",
+  "description": "Sistem CBT dan penilaian training Raja Emas Indonesia",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3100",
+    "start:3000": "next start -H 0.0.0.0 -p 3000",
+    "postinstall": "node scripts/setup-backup.cjs",
+    "setup:backup": "node scripts/setup-backup.cjs --strict",
+    "backup:now": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/backup-db.ps1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.15",
+    "mysql2": "^3.24.6",
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.4",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^4.3.4"
+  }
+}
