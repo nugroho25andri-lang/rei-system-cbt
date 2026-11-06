@@ -60,9 +60,11 @@ const statsJoins = `
   LEFT JOIN (SELECT id_peserta,MAX(nilai_akhir) nilai_akhir FROM penilaian_day6 GROUP BY id_peserta) d6 ON p.id=d6.id_peserta
   LEFT JOIN (SELECT id_peserta,MAX(total_manual) total_manual FROM penilaian_manual GROUP BY id_peserta) aadl ON p.id=aadl.id_peserta`;
 
-export default async function RekapitulasiPage({ searchParams }: { searchParams: Promise<{ page?: string; batch?: string; q?: string; saved?: string }> }) {
+export default async function RekapitulasiPage({ searchParams }: { searchParams: Promise<{ page?: string; batch?: string; q?: string; saved?: string; msg?: string }> }) {
   if (!await getAdminSession()) redirect("/login");
   const params = await searchParams;
+  const [kkmRows] = await db.execute("SELECT nilai_kkm FROM kkm LIMIT 1");
+  const kkm = Number((kkmRows as Array<{ nilai_kkm: number }>)[0]?.nilai_kkm ?? 750);
   const [latestRows] = await db.execute("SELECT MAX(batch) AS max_batch FROM peserta");
   const latestBatch = String((latestRows as Array<{ max_batch: string | null }>)[0]?.max_batch ?? "");
   const batch = params.batch === undefined ? latestBatch : params.batch.trim();
@@ -75,8 +77,8 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
     db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,COALESCE(t14.tes1,0) tes1,COALESCE(t14.tes2,0) tes2,COALESCE(t14.tes3,0) tes3,COALESCE(t14.tes4,0) tes4,COALESCE(d5.nilai_akhir,0) tes5,COALESCE(d6.nilai_akhir,0) tes6,COALESCE(aadl.total_manual,0) nilai_aadl,${totalExpression} total_nilai FROM peserta p ${joins}${filterSql} ORDER BY p.id DESC LIMIT 70 OFFSET ?`, [batch,batch,q,like,like,offset]),
     db.execute("SELECT DISTINCT batch FROM peserta WHERE batch IS NOT NULL AND batch<>'' ORDER BY batch DESC"),
     db.execute(`SELECT COUNT(*) total FROM peserta p ${filterSql}`, [batch,batch,q,like,like]),
-    db.execute(`SELECT COUNT(*) total, SUM(total_nilai>=750) passed FROM (SELECT p.id,${totalExpression} total_nilai FROM peserta p ${statsJoins}) grades`),
-    db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,${totalExpression} total_nilai FROM peserta p ${statsJoins}${filterSql} HAVING total_nilai<750 ORDER BY total_nilai ASC,p.nama_peserta ASC`, [batch,batch,q,like,like]),
+    db.execute(`SELECT COUNT(*) total, SUM(total_nilai>=?) passed FROM (SELECT p.id,${totalExpression} total_nilai FROM peserta p ${statsJoins}) grades`, [kkm]),
+    db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,${totalExpression} total_nilai FROM peserta p ${statsJoins}${filterSql} HAVING total_nilai<? ORDER BY total_nilai ASC,p.nama_peserta ASC`, [batch,batch,q,like,like,kkm]),
     db.execute("SELECT COUNT(*) total FROM peserta WHERE (?='' OR batch=?)", [batch,batch]),
     db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.batch,p.cabang,${totalExpression} total_nilai FROM peserta p ${joins}${filterSql} HAVING total_nilai>0 ORDER BY total_nilai DESC,p.nama_peserta ASC LIMIT 5`, [batch,batch,q,like,like]),
     db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.batch,p.cabang,${totalExpression} total_nilai FROM peserta p ${joins}${filterSql} HAVING total_nilai>0 ORDER BY total_nilai ASC,p.nama_peserta ASC LIMIT 5`, [batch,batch,q,like,like]),
@@ -85,7 +87,7 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
   const totalRecords = Number((countResult[0] as Array<{ total: number }>)[0]?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalRecords / 70));
   const totals = (totalResult[0] as Array<{ total: number; passed: number }>)[0] ?? { total: 0, passed: 0 };
-  const batchPassedQuery = batch ? await db.execute(`SELECT COUNT(*) total FROM (SELECT p.id,${totalExpression} total_nilai FROM peserta p ${statsJoins} WHERE p.batch=?) grades WHERE total_nilai>=750`, [batch]) : null;
+  const batchPassedQuery = batch ? await db.execute(`SELECT COUNT(*) total FROM (SELECT p.id,${totalExpression} total_nilai FROM peserta p ${statsJoins} WHERE p.batch=?) grades WHERE total_nilai>=?`, [batch, kkm]) : null;
   const passedBatch = Number(batchPassedQuery ? (batchPassedQuery[0] as Array<{ total: number }>)[0]?.total ?? 0 : 0);
   const participantCount = Number((batchCountResult[0] as Array<{ total: number }>)[0]?.total ?? 0);
   const failedRows = failResult[0] as unknown as Array<RekapRow & { total_nilai: number }>;
@@ -104,10 +106,12 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
     <>
       <PageHeader
         title="Rekapitulasi Nilai"
-        description={`Monitoring hasil ujian peserta CBT REI · KKM 750`}
+        description={`Monitoring hasil ujian peserta CBT REI · KKM ${kkm}`}
         actions={<a className={btnPrimary} href={`/rekapitulasi/export?${new URLSearchParams({ batch, q })}`}>Export Excel</a>}
       />
       {params.saved === "1" && <Notice>Nilai berhasil disimpan.</Notice>}
+      {params.msg === "kkm-saved" && <Notice>Standar KKM berhasil diperbarui.</Notice>}
+      {params.msg === "kkm-invalid" && <Notice kind="error">Nilai KKM tidak valid.</Notice>}
 
       <Card className="mb-6">
         <form action="/rekapitulasi" className="flex flex-wrap items-end gap-3">
@@ -157,7 +161,7 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
         </div>
       </Card>
 
-      <Card title={`Belum Lulus (KKM 750) · ${batch || "Semua batch"}`} bodyClassName="px-5 pb-4 pt-2">
+      <Card title={`Belum Lulus (KKM ${kkm}) · ${batch || "Semua batch"}`} bodyClassName="px-5 pb-4 pt-2">
         <TableWrap>
           <thead className="border-b border-rei-900/10"><tr>{["Peserta", "NIP", "Batch", "Total nilai"].map((head) => <th key={head} className={thClass}>{head}</th>)}</tr></thead>
           <tbody className="divide-y divide-rei-900/10">

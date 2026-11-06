@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getActiveAccessCodes } from "@/lib/access-codes";
 import { activityLabel, ACTIVITY_TONE } from "@/lib/activity";
 import { regenerateCodesAction } from "./actions";
+import { saveKkmAction } from "../kkm-actions";
 import { savePesertaAction } from "../peserta/actions";
 import DeleteParticipantButton from "./delete-participant-button";
 import ScoreAnalytics from "./score-analytics";
@@ -15,6 +16,10 @@ const participantMessages: Record<string, string> = {
   updated: "Data peserta berhasil diperbarui.",
   deleted: "Peserta berhasil dihapus.",
   invalid: "Data peserta belum lengkap atau tidak valid.",
+};
+const kkmMessages: Record<string, string> = {
+  "kkm-saved": "Standar KKM berhasil diperbarui.",
+  "kkm-invalid": "Nilai KKM harus berupa angka bulat antara 0 dan 10000.",
 };
 const participantFields = ["nip", "nama_peserta", "jabatan", "batch", "cabang", "penempatan"] as const;
 
@@ -98,12 +103,31 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {denied && <Notice kind="error">Akun Anda tidak memiliki akses ke halaman tersebut.</Notice>}
       {msg && participantMessages[msg] && <Notice kind={msg === "invalid" ? "error" : "success"}>{participantMessages[msg]}</Notice>}
+      {msg && kkmMessages[msg] && <Notice kind={msg === "kkm-invalid" ? "error" : "success"}>{kkmMessages[msg]}</Notice>}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Stat label="Total Soal" value={totalQuestions} hint="Seluruh bank soal" />
         <Stat label="Jawaban Masuk" value={totalAnswers.toLocaleString("id-ID")} hint="Baris jawaban peserta" />
         <Stat label="Standar KKM" value={kkm} hint="Batas kelulusan" />
       </div>
+
+      {canManage && (
+        <Card
+          title="Atur Standar KKM"
+          description="Nilai total minimum agar peserta dinyatakan lulus. Perubahan langsung dipakai di rekapitulasi dan export Excel."
+          className="mb-6"
+          bodyClassName="px-5 pb-5 pt-4"
+        >
+          <form action={saveKkmAction} className="flex flex-wrap items-end gap-3">
+            <label className="grid gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-rei-900/55">
+              Nilai KKM
+              <input className={`${inputClass} max-w-40`} type="number" name="nilai_kkm" defaultValue={kkm} min={0} max={10000} step={1} required />
+            </label>
+            <button type="submit" className={btnPrimary}>Simpan KKM</button>
+            <p className="pb-2 text-xs text-rei-900/50">Nilai saat ini: <b className="text-rei-900">{kkm}</b> · total nilai seluruh komponen ujian.</p>
+          </form>
+        </Card>
+      )}
 
       <ScoreAnalytics />
 
