@@ -43,7 +43,34 @@ export async function deletePesertaAction(form: FormData) {
   const id = Number(form.get("id"));
   const [rows] = await db.execute("SELECT nama_peserta,nip FROM peserta WHERE id=? LIMIT 1", [id]);
   const participant = (rows as Array<{ nama_peserta: string; nip: string }>)[0];
-  await db.execute("DELETE FROM peserta WHERE id=?", [id]);
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const related: Array<[string, string]> = [
+      ["jawaban_peserta", "id_peserta"],
+      ["penilaian_day6", "id_peserta"],
+      ["ojt_assessment", "id_peserta"],
+      ["ojt_submissions", "peserta_id"],
+      ["progres_materi_peserta", "peserta_id"],
+      ["progres_peserta", "peserta_id"],
+      ["review_3month", "id_peserta"],
+      ["review_5month", "id_peserta"],
+      ["status_training_peserta", "peserta_id"],
+      ["training_malam", "peserta_id"],
+      ["video_progress", "id_peserta"],
+      ["ujian_peserta", "peserta_id"],
+    ];
+    for (const [table, column] of related) {
+      await connection.execute(`DELETE FROM ${table} WHERE ${column}=?`, [id]);
+    }
+    await connection.execute("DELETE FROM peserta WHERE id=?", [id]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
   await logAdminActivity({
     action: "participant_delete",
     session,
