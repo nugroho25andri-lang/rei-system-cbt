@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { btnGhost, btnPrimary, inputClass, Notice, Stat, TableWrap, tdClass, thClass } from "@/components/ui";
 
-export type KoreksiRow = { id_peserta: number; nama_peserta: string; nip: string; batch: string; day: string; jumlah: number; dikoreksi: number; skor_auto: number; skor_final: number; total_bobot: number };
+export type KoreksiRow = { id_peserta: number; nama_peserta: string; nip: string; batch: string; day: string; jumlah: number; dikoreksi: number; berkas: number; skor_auto: number; skor_final: number; total_bobot: number };
 type Peserta = { id: number; nama_peserta: string; nip: string; batch: string; jabatan: string | null; cabang: string | null };
 type Question = {
   id_soal: number; no_soal: number; day: string; pertanyaan: string; bobot: number; jenis_soal: string | null;
@@ -13,6 +13,51 @@ type Question = {
 };
 type Summary = { answered: number; corrected: number; total: number; totalFinal: number; totalAuto: number; totalBobot: number };
 type Detail = { peserta: Peserta; day: string; questions: Question[]; summary: Summary };
+
+function fileUrl(path: string) {
+  return `/uploads/${path.replace(/^\/?uploads\//i, "")}`;
+}
+function fileKind(path: string) {
+  const ext = path.split("?")[0].split(".").pop()?.toLowerCase() ?? "";
+  if (["png", "jpg", "jpeg", "gif", "webp", "bmp"].includes(ext)) return "image" as const;
+  if (ext === "pdf") return "pdf" as const;
+  return "file" as const;
+}
+
+function AttachmentPreview({ path }: { path: string }) {
+  const [failed, setFailed] = useState(false);
+  const url = fileUrl(path);
+  const kind = fileKind(path);
+  const name = path.split("/").pop() ?? "lampiran";
+  const label = kind === "image" ? "Lihat gambar ukuran penuh" : kind === "pdf" ? "Buka PDF di tab baru" : "Unduh berkas";
+  return (
+    <div className="mt-2 rounded-lg border border-rei-900/10 bg-white p-2">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-rei-900/40">Lampiran jawaban</p>
+        <a className="text-xs font-bold text-gold-600 hover:text-gold-500" href={url} target="_blank" rel="noreferrer">{label} →</a>
+      </div>
+      {kind === "image" && !failed && (
+        <a href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-rei-900/10 bg-[#faf8fa]" title={name}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt={`Lampiran jawaban ${name}`} onError={() => setFailed(true)} className="mx-auto max-h-[380px] w-auto max-w-full object-contain" />
+        </a>
+      )}
+      {kind === "pdf" && (
+        <object data={url} type="application/pdf" className="h-[380px] w-full rounded-lg border border-rei-900/10 bg-[#faf8fa]">
+          <p className="p-3 text-xs text-rei-900/50">Pratinjau PDF tidak tersedia di peramban ini. <a className="font-bold text-gold-600" href={url} target="_blank" rel="noreferrer">Buka PDF</a>.</p>
+        </object>
+      )}
+      {(kind === "file" || failed) && (
+        <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-lg bg-[#faf8fa] px-3 py-2.5 text-sm font-semibold text-rei-900 transition hover:bg-gold-200/30">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-gold-600" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M8 13h8M8 17h5" /></svg>
+          <span className="truncate">{name}</span>
+        </a>
+      )}
+      {failed && <p className="mt-1.5 text-[11px] font-semibold text-rose-700">Berkas tidak dapat dimuat — kemungkinan data lama yang filenya tidak ada di server. Coba unduh lewat tautan di atas.</p>}
+      <p className="mt-1 truncate font-mono text-[10px] text-rei-900/40">{name}</p>
+    </div>
+  );
+}
 
 export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]; initialOpen?: { peserta: number; day?: string } }) {
   const router = useRouter();
@@ -121,7 +166,17 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
                 <td className={`${tdClass} font-mono text-xs`}>{row.nip}</td>
                 <td className={tdClass}>{row.batch}</td>
                 <td className={`${tdClass} whitespace-nowrap`}>{row.day}</td>
-                <td className={tdClass}>{row.dikoreksi}/{row.jumlah}</td>
+                <td className={tdClass}>
+                  <span className="inline-flex items-center gap-1.5">
+                    {row.dikoreksi}/{row.jumlah}
+                    {Number(row.berkas) > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gold-200/60 px-1.5 py-0.5 text-[10px] font-bold text-gold-600" title={`${Number(row.berkas)} jawaban berupa berkas/gambar`}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3" aria-hidden="true"><path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+                        {Number(row.berkas)}
+                      </span>
+                    )}
+                  </span>
+                </td>
                 <td className={tdClass}>{Number(row.skor_auto)}</td>
                 <td className={`${tdClass} font-bold`}>{Number(row.skor_final)}<span className="text-xs font-normal text-rei-900/40"> / {Number(row.total_bobot)}</span></td>
                 <td className={tdClass}><span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{complete ? "Sudah dikoreksi" : "Menunggu"}</span></td>
@@ -192,8 +247,8 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
 
                           <div className="mt-2 rounded-lg bg-[#faf8fa] p-2.5">
                             <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wide text-rei-900/40">Jawaban peserta</p>
-                            {question.jawaban ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-rei-900/85">{question.jawaban}</p> : <p className="text-sm italic text-rei-900/35">Tidak ada jawaban.</p>}
-                            {question.file_path && <a className="mt-1 inline-block text-xs font-bold text-gold-600 hover:text-gold-500" href={`/uploads/${question.file_path.replace(/^\/?uploads\//, "")}`} target="_blank" rel="noreferrer">Lihat lampiran →</a>}
+                            {question.jawaban ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-rei-900/85">{question.jawaban}</p> : <p className="text-sm italic text-rei-900/35">{question.file_path ? "Jawaban berupa berkas — lihat lampiran di bawah." : "Tidak ada jawaban."}</p>}
+                            {question.file_path && <AttachmentPreview path={question.file_path} />}
                             {isMcq && question.id_jawaban !== null && <p className={`mt-1 text-[11px] font-bold ${isCorrect ? "text-emerald-700" : "text-rose-700"}`}>{isCorrect ? "Sesuai kunci." : "Tidak sesuai kunci."}</p>}
                             {!isMcq && (question.kata_kunci_bobot || question.kata_kunci) && <p className="mt-1 text-[11px] text-rei-900/50"><b>Kata kunci:</b> {question.kata_kunci_bobot || question.kata_kunci}</p>}
                             {!isMcq && Number(question.skor_auto) > 0 && <p className="mt-0.5 text-[11px] font-semibold text-emerald-700">Nilai otomatis dari kata kunci: {Number(question.skor_auto)}</p>}

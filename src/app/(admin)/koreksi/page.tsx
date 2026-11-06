@@ -17,6 +17,7 @@ export default async function KoreksiPage({ searchParams }: { searchParams: Prom
     `SELECT p.id AS id_peserta, p.nama_peserta, p.nip, p.batch, s.day,
        COUNT(DISTINCT jp.id_soal) AS jumlah,
        COUNT(DISTINCT CASE WHEN jp.is_dikoreksi=1 THEN jp.id_soal END) AS dikoreksi,
+       SUM(CASE WHEN jp.file_path IS NOT NULL AND TRIM(jp.file_path)<>'' THEN 1 ELSE 0 END) AS berkas,
        SUM(COALESCE(jp.skor_auto,0)) AS skor_auto,
        SUM(COALESCE(jp.nilai,0)) AS skor_final,
        SUM(COALESCE(s.bobot,0)) AS total_bobot
