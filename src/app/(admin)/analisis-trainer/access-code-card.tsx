@@ -6,14 +6,14 @@ import { manageTrainerAccessCodeAction } from "@/lib/trainer-evaluation-actions"
 
 type BatchRow = { id: number; label: string; code: string | null; evaluations: number };
 
-export default function AccessCodeCard({ batches }: { batches: BatchRow[] }) {
+export default function AccessCodeCard({ batches, validDate }: { batches: BatchRow[]; validDate: string }) {
   const [codes, setCodes] = useState<Record<number, string | null>>(() => Object.fromEntries(batches.map((batch) => [batch.id, batch.code])));
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
   async function run(batch: BatchRow, mode: "ensure" | "regenerate") {
-    if (mode === "regenerate" && !window.confirm(`Buat kode baru untuk ${batch.label}? Kode lama tidak akan berlaku lagi.`)) return;
+    if (mode === "regenerate" && !window.confirm(`Generate kode baru untuk ${batch.label}? Kode hari ini yang lama langsung tidak berlaku.`)) return;
     setPendingId(batch.id);
     setMessage(null);
     try {
@@ -54,10 +54,14 @@ export default function AccessCodeCard({ batches }: { batches: BatchRow[] }) {
   return (
     <Card
       title="Kode Akses Form Penilaian"
-      description="Kode ini dipakai peserta pada halaman /evaluasi-trainer. Peserta yang login portal tidak memerlukan kode."
+      description="Kode dibuat otomatis setiap hari untuk semua batch, termasuk batch baru yang ditambahkan. Kode hari sebelumnya otomatis tidak berlaku."
       className="mb-6"
       bodyClassName="px-5 pb-4 pt-2"
     >
+      <div className="mx-1 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-gold-300 bg-gold-200/50 px-4 py-2.5">
+        <span className="text-xs font-bold text-rei-900/70">Kode aktif untuk: <b className="text-rei-900">{validDate}</b></span>
+        <span className="text-[11px] font-semibold text-rei-900/50">Peserta login portal tidak memerlukan kode · kode hanya untuk halaman /evaluasi-trainer</span>
+      </div>
       {message && (
         <p role="status" className={`mx-1 mb-3 rounded-xl border px-4 py-2.5 text-sm font-medium ${message.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
           {message.text}
@@ -96,7 +100,7 @@ export default function AccessCodeCard({ batches }: { batches: BatchRow[] }) {
                           </button>
                           <a className={btnGhost} href={`/evaluasi-trainer?kode=${encodeURIComponent(code)}`} target="_blank" rel="noreferrer">Buka form</a>
                           <button type="button" className={btnGhost} onClick={() => void run(batch, "regenerate")} disabled={pendingId === batch.id}>
-                            {pendingId === batch.id ? "Memproses…" : "Ganti kode"}
+                            {pendingId === batch.id ? "Memproses…" : "Generate ulang"}
                           </button>
                         </>
                       ) : (

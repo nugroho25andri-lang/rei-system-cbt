@@ -165,55 +165,123 @@ export async function getAccessCodeBatch(code: string) {
   const value = String(code ?? "").trim();
   if (!value) return null;
   const [rows] = await db.execute(
-    "SELECT b.id, b.nama_batch FROM evaluasi_kode_akses k INNER JOIN evaluasi_batch b ON b.id=k.batch_id WHERE k.kode_akses=? AND k.aktif=1 LIMIT 1",
+    "SELECT b.id, b.nama_batch, k.created_at FROM evaluasi_kode_akses k INNER JOIN evaluasi_batch b ON b.id=k.batch_id WHERE k.kode_akses=? AND k.aktif=1 LIMIT 1",
     [value],
   );
-  const row = (rows as Array<{ id: number; nama_batch: string }>)[0];
-  return row ? { id: Number(row.id), label: String(row.nama_batch) } : null;
+  const row = (rows as Array<{ id: number; nama_batch: string; created_at: unknown }>)[0];
+  if (!row) return null;
+  // Kode hanya berlaku pada hari pembuatannya (zona waktu Jakarta).
+  if (jakartaDateOf(row.created_at) !== todayJakarta()) return null;
+  return { id: Number(row.id), label: String(row.nama_batch) };
 }
 
 export type AccessCodeBatchRow = { id: number; label: string; code: string | null; evaluations: number };
 
-export async function getAccessCodeOverview(): Promise<AccessCodeBatchRow[]> {
-  await ensureTrainerEvaluationTable();
-  const [batchRows, codeRows, countRows] = await Promise.all([
-    db.execute("SELECT id,nama_batch FROM evaluasi_batch ORDER BY id DESC"),
-    db.execute("SELECT id,batch_id,kode_akses,aktif FROM evaluasi_kode_akses ORDER BY aktif DESC, id DESC"),
-    db.execute("SELECT batch,COUNT(*) n FROM penilaian_trainer GROUP BY batch"),
-  ]);
-  const evaluationsByBatch: Record<string, number> = {};
-  for (const row of countRows[0] as Array<{ batch: string; n: number | string }>) {
-    evaluationsByBatch[normalizeBatch(row.batch)] = Number(row.n) || 0;
-  }
-  const codeByBatch = new Map<number, string>();
-  for (const row of codeRows[0] as Array<{ batch_id: number; kode_akses: string }>) {
-    const batchId = Number(row.batch_id);
-    if (!codeByBatch.has(batchId)) codeByBatch.set(batchId, String(row.kode_akses));
-  }
-  return (batchRows[0] as Array<{ id: number; nama_batch: string }>).map((row) => ({
-    id: Number(row.id),
-    label: String(row.nama_batch),
-    code: codeByBatch.get(Number(row.id)) ?? null,
-    evaluations: evaluationsByBatch[normalizeBatch(row.nama_batch)] ?? 0,
-  }));
+function jakartaDateOf(value: unknown) {
+  const date = value instanceof Date ? value : new Date(String(value ?? ""));
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function makeAccessCode(label: string) {
+  const suffix = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
+  return `B${normalizeBatch(label).toUpperCase()}-${suffix}`;
+}
+
+async function insertAccessCode(batchId: number, label: string) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = makeAccessCode(label);
+    try {
+      const [result] = await db.execute("INSERT INTO evaluasi_kode_akses (batch_id,kode_akses,aktif) VALUES (?,?,1)", [batchId, code]);
+      // Pastikan hanya satu kode aktif per batch meski ada dua permintaan bersamaan.
+      await db.execute("UPDATE evaluasi_kode_akses SET aktif=0 WHERE batch_id=? AND aktif=1 AND id<>?", [batchId, Number((result as { insertId: number }).insertId)]);
+      return code;
+    } catch (error) {
+      if ((error as { code?: string })?.code === "ER_DUP_ENTRY") continue;
+      throw error;
+    }
+  }
+  throw new Error("Gagal membuat kode akses unik. Silakan coba lagi.");
+}
+
+/**
+ * Batch penilaian mengikuti data evaluasi (rundown) dan batch peserta.
+ * Batch peserta yang belum punya baris evaluasi_batch dibuatkan otomatis
+ * supaya kode aksesnya juga otomatis tersedia.
+ */
+async function listKnownBatches() {
+  const [evalRows] = await db.execute("SELECT id,nama_batch FROM evaluasi_batch ORDER BY id");
+  const batches = new Map<string, { id: number; label: string }>();
+  for (const row of evalRows as Array<{ id: number; nama_batch: string }>) {
+    batches.set(normalizeBatch(row.nama_batch), { id: Number(row.id), label: String(row.nama_batch) });
+  }
+  const [participantRows] = await db.execute("SELECT DISTINCT batch FROM peserta WHERE TRIM(COALESCE(batch,''))<>''");
+  for (const row of participantRows as Array<{ batch: string }>) {
+    const raw = String(row.batch ?? "").trim();
+    const key = normalizeBatch(raw);
+    if (!key || batches.has(key)) continue;
+    const label = /^\d+$/.test(raw) ? `Batch ${raw}` : raw;
+    const [inserted] = await db.execute("INSERT INTO evaluasi_batch (nama_batch,aktif) VALUES (?,1)", [label]);
+    batches.set(key, { id: Number((inserted as { insertId: number }).insertId), label });
+  }
+  return Array.from(batches.values()).sort((a, b) => batchSortValue(b.label) - batchSortValue(a.label) || a.label.localeCompare(b.label));
+}
+
+/**
+ * Memastikan setiap batch memiliki satu kode akses aktif untuk hari ini.
+ * Kode hari sebelumnya otomatis dinonaktifkan, dan batch baru langsung
+ * mendapatkan kode tanpa perlu tindakan admin.
+ */
+export async function getAccessCodeOverview(): Promise<AccessCodeBatchRow[]> {
+  await ensureTrainerEvaluationTable();
+  const batches = await listKnownBatches();
+  const today = todayJakarta();
+  const [codeRows] = await db.execute("SELECT id,batch_id,kode_akses,aktif,created_at FROM evaluasi_kode_akses ORDER BY aktif DESC, id DESC");
+  const activeCodes = new Map<number, { code: string; date: string }>();
+  for (const row of codeRows as Array<{ batch_id: number; kode_akses: string; aktif: number; created_at: unknown }>) {
+    const batchId = Number(row.batch_id);
+    if (Number(row.aktif) !== 1 || activeCodes.has(batchId)) continue;
+    activeCodes.set(batchId, { code: String(row.kode_akses), date: jakartaDateOf(row.created_at) });
+  }
+
+  const codes = new Map<number, string>();
+  for (const batch of batches) {
+    const active = activeCodes.get(batch.id);
+    if (active && active.date === today) {
+      codes.set(batch.id, active.code);
+      continue;
+    }
+    await db.execute("UPDATE evaluasi_kode_akses SET aktif=0 WHERE batch_id=? AND aktif=1", [batch.id]);
+    codes.set(batch.id, await insertAccessCode(batch.id, batch.label));
+  }
+
+  const [countRows] = await db.execute("SELECT batch,COUNT(*) n FROM penilaian_trainer GROUP BY batch");
+  const evaluationsByBatch: Record<string, number> = {};
+  for (const row of countRows as Array<{ batch: string; n: number | string }>) {
+    evaluationsByBatch[normalizeBatch(row.batch)] = Number(row.n) || 0;
+  }
+
+  return batches.map((batch) => ({
+    id: batch.id,
+    label: batch.label,
+    code: codes.get(batch.id) ?? null,
+    evaluations: evaluationsByBatch[normalizeBatch(batch.label)] ?? 0,
+  }));
+}
+
 export async function issueAccessCode(batchId: number, regenerate: boolean) {
   if (!Number.isInteger(batchId) || batchId <= 0) throw new Error("Batch tidak valid.");
   const [rows] = await db.execute("SELECT id,nama_batch FROM evaluasi_batch WHERE id=? LIMIT 1", [batchId]);
   const batch = (rows as Array<{ id: number; nama_batch: string }>)[0];
   if (!batch) throw new Error("Batch tidak ditemukan.");
   if (!regenerate) {
-    const [active] = await db.execute("SELECT kode_akses FROM evaluasi_kode_akses WHERE batch_id=? AND aktif=1 LIMIT 1", [batchId]);
-    const existing = (active as Array<{ kode_akses: string }>)[0];
-    if (existing) return String(existing.kode_akses);
+    const [active] = await db.execute("SELECT kode_akses,created_at FROM evaluasi_kode_akses WHERE batch_id=? AND aktif=1 ORDER BY id DESC LIMIT 1", [batchId]);
+    const existing = (active as Array<{ kode_akses: string; created_at: unknown }>)[0];
+    if (existing && jakartaDateOf(existing.created_at) === todayJakarta()) return String(existing.kode_akses);
   }
-  const suffix = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
-  const code = `B${normalizeBatch(batch.nama_batch).toUpperCase()}-${suffix}`;
-  if (regenerate) await db.execute("UPDATE evaluasi_kode_akses SET aktif=0 WHERE batch_id=?", [batchId]);
-  await db.execute("INSERT INTO evaluasi_kode_akses (batch_id,kode_akses,aktif) VALUES (?,?,1)", [batchId, code]);
-  return code;
+  await db.execute("UPDATE evaluasi_kode_akses SET aktif=0 WHERE batch_id=? AND aktif=1", [batchId]);
+  return insertAccessCode(Number(batch.id), String(batch.nama_batch));
 }
 
 export type InsertEvaluationInput = {

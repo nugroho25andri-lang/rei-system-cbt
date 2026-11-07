@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/session";
 import { getAccessCodeOverview, getTrainerAnalysis, type TrainerRank } from "@/lib/trainer-evaluation";
-import { formatDuration, formatTanggalShort } from "@/lib/trainer-evaluation-shared";
+import { formatDuration, formatTanggal, formatTanggalShort, todayJakarta } from "@/lib/trainer-evaluation-shared";
 import { btnPrimary, Card, Notice, PageHeader, selectClass, Stat } from "@/components/ui";
 import TrainerTrendChart from "./trainer-trend-chart";
 import SessionTable from "./session-table";
@@ -42,7 +42,7 @@ export default async function AnalisisTrainerPage({ searchParams }: { searchPara
         actions={<a className={btnPrimary} href="/evaluasi-trainer" target="_blank" rel="noreferrer">Buka Form Penilaian</a>}
       />
 
-      <AccessCodeCard batches={accessCodes} />
+      <AccessCodeCard batches={accessCodes} validDate={formatTanggal(todayJakarta())} />
 
       <Card className="mb-6" bodyClassName="px-5 py-4">
         <form action="/analisis-trainer" className="flex flex-wrap items-end gap-3">

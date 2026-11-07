@@ -27,13 +27,13 @@ export default async function PublicTrainerEvaluationPage({ searchParams }: { se
             <p className="mt-1 text-sm text-rei-900/60">Masukkan kode akses yang diberikan admin untuk membuka form penilaian trainer batch Anda.</p>
             {code && (
               <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
-                Kode akses tidak valid atau sudah tidak aktif.
+                Kode akses tidak valid atau sudah tidak aktif. Kode diperbarui otomatis setiap hari — minta kode terbaru kepada admin.
               </p>
             )}
             <form action="/evaluasi-trainer" method="get" className="mt-4 flex flex-wrap items-end gap-3">
               <label className="grid flex-1 gap-1 text-xs font-bold text-rei-900/70">
                 Kode akses
-                <input name="kode" required defaultValue={code} className="w-full min-w-0 rounded-lg border border-rei-900/15 bg-white px-3 py-2.5 text-sm text-rei-900 outline-none transition focus:border-gold-500 focus:ring-2 focus:ring-gold-400/30" placeholder="Contoh: B43-26-08-55" autoComplete="off" />
+                <input name="kode" required defaultValue={code} className="w-full min-w-0 rounded-lg border border-rei-900/15 bg-white px-3 py-2.5 text-sm text-rei-900 outline-none transition focus:border-gold-500 focus:ring-2 focus:ring-gold-400/30" placeholder="Contoh: B44-7KQ2MX" autoComplete="off" />
               </label>
               <button type="submit" className="inline-flex items-center justify-center rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-bold text-rei-900 shadow-sm transition hover:bg-gold-400">Buka form</button>
             </form>
