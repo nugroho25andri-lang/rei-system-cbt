@@ -4,7 +4,7 @@ import { useState } from "react";
 import { btnGhost, btnPrimary, Card, thClass, tdClass } from "@/components/ui";
 import { manageTrainerAccessCodeAction } from "@/lib/trainer-evaluation-actions";
 
-type BatchRow = { id: number; label: string; code: string | null; evaluations: number };
+type BatchRow = { id: number; label: string; code: string | null; evaluations: number; isLatest: boolean; manual: boolean };
 
 export default function AccessCodeCard({ batches, validDate }: { batches: BatchRow[]; validDate: string }) {
   const [codes, setCodes] = useState<Record<number, string | null>>(() => Object.fromEntries(batches.map((batch) => [batch.id, batch.code])));
@@ -23,7 +23,7 @@ export default function AccessCodeCard({ batches, validDate }: { batches: BatchR
       const result = await manageTrainerAccessCodeAction(null, formData);
       if (result?.ok && result.code) {
         setCodes((current) => ({ ...current, [batch.id]: result.code! }));
-        setMessage({ kind: "success", text: mode === "regenerate" ? `Kode baru ${batch.label} berhasil dibuat.` : `Kode akses ${batch.label} berhasil dibuat.` });
+        setMessage({ kind: "success", text: mode === "regenerate" ? `Kode baru ${batch.label} berhasil dibuat.` : `Kode akses ${batch.label} berhasil diaktifkan.` });
       } else {
         setMessage({ kind: "error", text: result?.error ?? "Kode akses gagal dibuat." });
       }
@@ -54,7 +54,7 @@ export default function AccessCodeCard({ batches, validDate }: { batches: BatchR
   return (
     <Card
       title="Kode Akses Form Penilaian"
-      description="Kode dibuat otomatis setiap hari untuk semua batch, termasuk batch baru yang ditambahkan. Kode hari sebelumnya otomatis tidak berlaku."
+      description="Kode dibuat otomatis setiap hari hanya untuk batch terbaru. Batch lain bisa diaktifkan manual bila masih diperlukan, dan kode hari sebelumnya otomatis tidak berlaku."
       className="mb-6"
       bodyClassName="px-5 pb-4 pt-2"
     >
@@ -82,12 +82,18 @@ export default function AccessCodeCard({ batches, validDate }: { batches: BatchR
               const code = codes[batch.id] ?? null;
               return (
                 <tr key={batch.id} className="hover:bg-gold-200/15">
-                  <td className={`${tdClass} font-semibold`}>{batch.label}</td>
+                  <td className={`${tdClass} font-semibold`}>
+                    <span className="flex flex-wrap items-center gap-2">
+                      {batch.label}
+                      {batch.isLatest && <span className="rounded-full bg-gold-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rei-900">Batch terbaru</span>}
+                      {!batch.isLatest && code && <span className="rounded-full bg-rei-900/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rei-900/60">Manual</span>}
+                    </span>
+                  </td>
                   <td className={tdClass}>
                     {code ? (
                       <span className="rounded-lg border border-rei-900/15 bg-rei-100/50 px-3 py-1.5 font-mono text-sm font-extrabold tracking-wide text-rei-900">{code}</span>
                     ) : (
-                      <span className="text-xs font-semibold text-rose-600">Belum ada kode</span>
+                      <span className="text-xs font-semibold text-rei-900/45">{batch.isLatest ? "Menyiapkan kode…" : "Belum diaktifkan"}</span>
                     )}
                   </td>
                   <td className={`${tdClass} text-right font-bold`}>{batch.evaluations}</td>
@@ -105,7 +111,7 @@ export default function AccessCodeCard({ batches, validDate }: { batches: BatchR
                         </>
                       ) : (
                         <button type="button" className={btnPrimary} onClick={() => void run(batch, "ensure")} disabled={pendingId === batch.id}>
-                          {pendingId === batch.id ? "Membuat…" : "Buat kode"}
+                          {pendingId === batch.id ? "Membuat…" : batch.isLatest ? "Buat kode" : "Aktifkan kode"}
                         </button>
                       )}
                     </div>
@@ -119,7 +125,7 @@ export default function AccessCodeCard({ batches, validDate }: { batches: BatchR
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-[11px] text-rei-900/45">Kode hanya ditampilkan di dashboard admin. Membagikan tautan <b>Buka form</b> akan langsung membuka form dengan kode terisi.</p>
+      <p className="mt-3 text-[11px] text-rei-900/45">Kode hanya ditampilkan di dashboard admin. Membagikan tautan <b>Buka form</b> akan langsung membuka form dengan kode terisi. Kode manual tetap berlaku sampai akhir hari.</p>
     </Card>
   );
 }

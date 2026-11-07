@@ -11,6 +11,7 @@ import {
   formatDuration,
   formatTanggal,
   formatTanggalShort,
+  splitTrainerNames,
   todayJakarta,
   type EvaluationFormState,
 } from "@/lib/trainer-evaluation-shared";
@@ -56,22 +57,46 @@ export default function TrainerEvaluationForm({
     label: day.tanggal ? `Hari ${day.dayKe} · ${formatTanggal(day.tanggal)}` : `Hari ${day.dayKe}`,
   })), [context.days]);
 
+  // Trainer yang mengajar per hari mengikuti rundown batch.
+  const trainersByDay = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const day of context.days) {
+      const names = day.slots.flatMap((slot) => splitTrainerNames(slot.trainer))
+        .map((name) => context.trainers.find((entry) => entry.toLowerCase() === name.toLowerCase()) ?? name);
+      map.set(day.dayKe, Array.from(new Set(names)));
+    }
+    return map;
+  }, [context.days, context.trainers]);
+
+  const dayTrainers = trainersByDay.get(Number(dayKe)) ?? [];
+  const trainerOptions = dayTrainers.length ? dayTrainers : context.trainers;
+
   useEffect(() => {
-    if (!trainer) return;
+    const names = trainersByDay.get(Number(dayKe)) ?? [];
+    const available = names.length ? names : context.trainers;
+    const valid = trainer && available.some((name) => name.toLowerCase() === trainer.toLowerCase());
+    if (!valid) {
+      setTrainer(available.length === 1 ? available[0] : "");
+      setJamMulai("");
+      setJamSelesai("");
+      return;
+    }
     const entries = context.schedule[trainer] ?? [];
     const match = entries.find((entry) => entry.dayKe === Number(dayKe));
-    if (!match) return;
+    if (!match) {
+      setJamMulai("");
+      setJamSelesai("");
+      return;
+    }
     setJamMulai(match.jamMulai);
     setJamSelesai(match.jamSelesai);
     if (match.tanggal) setTanggal(match.tanggal);
-  }, [trainer, dayKe, context.schedule]);
+  }, [trainer, dayKe, context.schedule, context.trainers, trainersByDay]);
 
   useEffect(() => {
-    if (!tanggal) {
-      const match = context.days.find((day) => day.dayKe === Number(dayKe));
-      if (match?.tanggal) setTanggal(match.tanggal);
-    }
-  }, [dayKe, context.days, tanggal]);
+    const match = context.days.find((day) => day.dayKe === Number(dayKe));
+    if (match?.tanggal) setTanggal(match.tanggal);
+  }, [dayKe, context.days]);
 
   const answered = TRAINER_CRITERIA.filter((criterion) => scores[criterion.key] > 0).length;
   const average = answered ? Object.values(scores).reduce((sum, value) => sum + value, 0) / answered : 0;
@@ -127,7 +152,7 @@ export default function TrainerEvaluationForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-1 text-xs font-bold text-rei-900/70">
                 Kode akses
-                <input name="kode_akses" className={inputClass} required placeholder="Contoh: B43-26-08-55" autoComplete="off" defaultValue={initialCode} />
+                <input name="kode_akses" className={inputClass} required placeholder="Contoh: B44-7KQ2MX" autoComplete="off" defaultValue={initialCode} />
               </label>
               <label className="grid gap-1 text-xs font-bold text-rei-900/70">
                 NIP peserta
@@ -138,17 +163,18 @@ export default function TrainerEvaluationForm({
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="grid gap-1 text-xs font-bold text-rei-900/70">
-              Nama trainer *
-              <select name="trainer" className={selectClass} required value={trainer} onChange={(event) => setTrainer(event.target.value)}>
-                <option value="">Pilih trainer</option>
-                {context.trainers.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </label>
-            <label className="grid gap-1 text-xs font-bold text-rei-900/70">
               Hari ke *
               <select name="day_ke" className={selectClass} required value={dayKe} onChange={(event) => setDayKe(event.target.value)}>
                 {dayOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
+            </label>
+            <label className="grid gap-1 text-xs font-bold text-rei-900/70">
+              Nama trainer *
+              <select name="trainer" className={selectClass} required value={trainer} onChange={(event) => setTrainer(event.target.value)}>
+                <option value="">Pilih trainer</option>
+                {trainerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <span className="text-[10px] font-medium text-rei-900/45">{dayTrainers.length ? "Hanya trainer yang mengajar pada hari ini." : "Jadwal trainer hari ini belum tersedia."}</span>
             </label>
             <label className="grid gap-1 text-xs font-bold text-rei-900/70">
               Tanggal mengajar *

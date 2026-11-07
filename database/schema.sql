@@ -114,6 +114,7 @@ CREATE TABLE `evaluasi_kode_akses` (
   `batch_id` int NOT NULL,
   `kode_akses` varchar(100) NOT NULL,
   `aktif` tinyint(1) NOT NULL DEFAULT '1',
+  `manual` tinyint(1) NOT NULL DEFAULT '0',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_kode_akses` (`kode_akses`),

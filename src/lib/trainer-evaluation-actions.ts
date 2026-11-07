@@ -8,6 +8,7 @@ import { getAccessCodeBatch, getBatchContext, insertTrainerEvaluation, issueAcce
 import {
   TRAINER_CRITERIA,
   normalizeBatch,
+  splitTrainerNames,
   todayJakarta,
   type EvaluationFormState,
   type TrainerCriterionKey,
@@ -85,6 +86,14 @@ export async function submitTrainerEvaluationAction(_prevState: EvaluationFormSt
     const dayKe = Number(formData.get("day_ke"));
     if (!Number.isInteger(dayKe) || dayKe <= 0 || !context.days.some((day) => day.dayKe === dayKe)) {
       return fail("Pilih hari ke berapa trainer mengajar.");
+    }
+    // Trainer harus benar-benar mengajar pada hari yang dipilih menurut rundown.
+    const day = context.days.find((entry) => entry.dayKe === dayKe);
+    if (day && day.slots.length) {
+      const dayTrainers = new Set(day.slots.flatMap((slot) => splitTrainerNames(slot.trainer)).map((name) => name.toLowerCase()));
+      if (!dayTrainers.has(trainer.toLowerCase())) {
+        return fail(`${trainer} tidak mengajar pada hari ke-${dayKe}. Pilih trainer yang mengajar pada hari itu.`);
+      }
     }
 
     const tanggal = String(formData.get("tanggal") ?? "").trim();

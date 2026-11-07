@@ -29,6 +29,14 @@ export function normalizeBatch(value: string) {
   return String(value ?? "").toLowerCase().replace(/batch/g, "").replace(/[^a-z0-9]/g, "");
 }
 
+/** Pisahkan nama trainer pada satu sesi rundown (mis. "Andri, Bu Novi & Dana"). */
+export function splitTrainerNames(value: string) {
+  return String(value ?? "")
+    .split(/[,;/&]+|\bdan\b/gi)
+    .map((entry) => entry.replace(/\(.*?\)/g, "").trim())
+    .filter(Boolean);
+}
+
 export function maskIdentity() {
   return "••••••";
 }
