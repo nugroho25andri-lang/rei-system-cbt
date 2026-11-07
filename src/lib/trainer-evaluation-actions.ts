@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getEmployeeSession } from "@/lib/employee-session";
-import { getAccessCodeBatch, getBatchContext, insertTrainerEvaluation } from "@/lib/trainer-evaluation";
+import { getAdminSession } from "@/lib/session";
+import { getAccessCodeBatch, getBatchContext, insertTrainerEvaluation, issueAccessCode } from "@/lib/trainer-evaluation";
 import {
   TRAINER_CRITERIA,
   normalizeBatch,
@@ -14,6 +15,25 @@ import {
 
 function fail(error: string): EvaluationFormState {
   return { ok: false, error };
+}
+
+export type AccessCodeActionState = { ok?: boolean; error?: string; code?: string } | null;
+
+export async function manageTrainerAccessCodeAction(_prevState: AccessCodeActionState, formData: FormData): Promise<AccessCodeActionState> {
+  const session = await getAdminSession();
+  if (!session || !["superadmin", "admin"].includes(session.role)) {
+    return { ok: false, error: "Anda tidak berwenang mengelola kode akses." };
+  }
+  const batchId = Number(formData.get("batch_id"));
+  const regenerate = String(formData.get("mode") ?? "") === "regenerate";
+  try {
+    const code = await issueAccessCode(batchId, regenerate);
+    revalidatePath("/analisis-trainer");
+    return { ok: true, code };
+  } catch (error) {
+    console.error("manageTrainerAccessCodeAction", error);
+    return { ok: false, error: error instanceof Error ? error.message : "Kode akses gagal dibuat." };
+  }
 }
 
 export async function submitTrainerEvaluationAction(_prevState: EvaluationFormState, formData: FormData): Promise<EvaluationFormState> {

@@ -1,9 +1,10 @@
 import { requireRole } from "@/lib/session";
-import { getTrainerAnalysis, type TrainerRank } from "@/lib/trainer-evaluation";
+import { getAccessCodeOverview, getTrainerAnalysis, type TrainerRank } from "@/lib/trainer-evaluation";
 import { formatDuration, formatTanggalShort } from "@/lib/trainer-evaluation-shared";
 import { btnPrimary, Card, Notice, PageHeader, selectClass, Stat } from "@/components/ui";
 import TrainerTrendChart from "./trainer-trend-chart";
 import SessionTable from "./session-table";
+import AccessCodeCard from "./access-code-card";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,10 @@ function RankBadge({ index }: { index: number }) {
 export default async function AnalisisTrainerPage({ searchParams }: { searchParams: Promise<{ batch?: string; trainer?: string }> }) {
   await requireRole(["superadmin", "admin"]);
   const params = await searchParams;
-  const analysis = await getTrainerAnalysis({ batch: params.batch ?? "", trainer: params.trainer ?? "" });
+  const [analysis, accessCodes] = await Promise.all([
+    getTrainerAnalysis({ batch: params.batch ?? "", trainer: params.trainer ?? "" }),
+    getAccessCodeOverview(),
+  ]);
   const { totals, ranking, criteria, series, sessions, recommendations } = analysis;
   const hasData = totals.responses > 0;
   const attentionCount = ranking.filter((entry) => entry.tone === "attention").length;
@@ -37,6 +41,8 @@ export default async function AnalisisTrainerPage({ searchParams }: { searchPara
         description="Rekap penilaian peserta terhadap trainer: nilai, durasi mengajar, tren per batch, ranking, dan langkah evaluasi."
         actions={<a className={btnPrimary} href="/evaluasi-trainer" target="_blank" rel="noreferrer">Buka Form Penilaian</a>}
       />
+
+      <AccessCodeCard batches={accessCodes} />
 
       <Card className="mb-6" bodyClassName="px-5 py-4">
         <form action="/analisis-trainer" className="flex flex-wrap items-end gap-3">
@@ -64,7 +70,7 @@ export default async function AnalisisTrainerPage({ searchParams }: { searchPara
         <Card title="Belum ada penilaian trainer">
           <div className="space-y-2 text-sm text-rei-900/65">
             <p>Penilaian akan muncul di sini setelah peserta mengirim form penilaian trainer dari portal peserta atau halaman kode akses.</p>
-            <p>Bagikan tautan <a className="font-bold text-gold-600 hover:text-gold-500" href="/evaluasi-trainer" target="_blank" rel="noreferrer">/evaluasi-trainer</a> beserta kode akses batch kepada peserta.</p>
+            <p>Gunakan panel <b>Kode Akses Form Penilaian</b> di atas untuk menyalin kode/tautan yang dibagikan ke peserta.</p>
           </div>
         </Card>
       ) : (

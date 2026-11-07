@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { randomInt } from "node:crypto";
 import {
   TRAINER_CRITERIA,
   batchSortValue,
@@ -169,6 +170,50 @@ export async function getAccessCodeBatch(code: string) {
   );
   const row = (rows as Array<{ id: number; nama_batch: string }>)[0];
   return row ? { id: Number(row.id), label: String(row.nama_batch) } : null;
+}
+
+export type AccessCodeBatchRow = { id: number; label: string; code: string | null; evaluations: number };
+
+export async function getAccessCodeOverview(): Promise<AccessCodeBatchRow[]> {
+  await ensureTrainerEvaluationTable();
+  const [batchRows, codeRows, countRows] = await Promise.all([
+    db.execute("SELECT id,nama_batch FROM evaluasi_batch ORDER BY id DESC"),
+    db.execute("SELECT id,batch_id,kode_akses,aktif FROM evaluasi_kode_akses ORDER BY aktif DESC, id DESC"),
+    db.execute("SELECT batch,COUNT(*) n FROM penilaian_trainer GROUP BY batch"),
+  ]);
+  const evaluationsByBatch: Record<string, number> = {};
+  for (const row of countRows[0] as Array<{ batch: string; n: number | string }>) {
+    evaluationsByBatch[normalizeBatch(row.batch)] = Number(row.n) || 0;
+  }
+  const codeByBatch = new Map<number, string>();
+  for (const row of codeRows[0] as Array<{ batch_id: number; kode_akses: string }>) {
+    const batchId = Number(row.batch_id);
+    if (!codeByBatch.has(batchId)) codeByBatch.set(batchId, String(row.kode_akses));
+  }
+  return (batchRows[0] as Array<{ id: number; nama_batch: string }>).map((row) => ({
+    id: Number(row.id),
+    label: String(row.nama_batch),
+    code: codeByBatch.get(Number(row.id)) ?? null,
+    evaluations: evaluationsByBatch[normalizeBatch(row.nama_batch)] ?? 0,
+  }));
+}
+
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export async function issueAccessCode(batchId: number, regenerate: boolean) {
+  if (!Number.isInteger(batchId) || batchId <= 0) throw new Error("Batch tidak valid.");
+  const [rows] = await db.execute("SELECT id,nama_batch FROM evaluasi_batch WHERE id=? LIMIT 1", [batchId]);
+  const batch = (rows as Array<{ id: number; nama_batch: string }>)[0];
+  if (!batch) throw new Error("Batch tidak ditemukan.");
+  if (!regenerate) {
+    const [active] = await db.execute("SELECT kode_akses FROM evaluasi_kode_akses WHERE batch_id=? AND aktif=1 LIMIT 1", [batchId]);
+    const existing = (active as Array<{ kode_akses: string }>)[0];
+    if (existing) return String(existing.kode_akses);
+  }
+  const suffix = Array.from({ length: 6 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
+  const code = `B${normalizeBatch(batch.nama_batch).toUpperCase()}-${suffix}`;
+  if (regenerate) await db.execute("UPDATE evaluasi_kode_akses SET aktif=0 WHERE batch_id=?", [batchId]);
+  await db.execute("INSERT INTO evaluasi_kode_akses (batch_id,kode_akses,aktif) VALUES (?,?,1)", [batchId, code]);
+  return code;
 }
 
 export type InsertEvaluationInput = {
