@@ -105,7 +105,13 @@
 .pptx-canvas-wrap canvas { width: 100%; max-width: 1100px; height: auto; background: white; }
 .pptx-toolbar { display: flex; align-items: center; gap: 12px; justify-content: center; padding: 12px; }
 .training-submit { text-align: center; }
-@media(max-width:720px) { .employee-grid { grid-template-columns: 1fr; } .employee-welcome { align-items: flex-start; flex-direction: column; } }
+.employee-eval-cta { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-top: 18px; padding: 20px 24px; border: 1px solid #eadfbd; border-radius: 14px; background: linear-gradient(135deg, #fffaf0, #fff); }
+.employee-eval-cta small { color: #9a7118; font-weight: 700; letter-spacing: .12em; }
+.employee-eval-cta h2 { margin: 4px 0; font-size: 1.05rem; }
+.employee-eval-cta p { margin: 0; color: #655b65; font-size: .9rem; }
+.employee-eval-cta > a { flex-shrink: 0; padding: 11px 16px; border-radius: 9px; background: #e0b135; color: #2b1129; font-weight: 700; text-decoration: none; }
+.employee-eval-cta > a:hover { background: #d4a52c; }
+@media(max-width:720px) { .employee-grid { grid-template-columns: 1fr; } .employee-welcome { align-items: flex-start; flex-direction: column; } .employee-eval-cta { align-items: flex-start; flex-direction: column; } }
 
 /* ===== Monitor terminal ===== */
 .monitor-page { min-height: 100vh; padding: 24px; background: #0d0d0d; color: #00ff00; font-family: "Courier New", monospace; }

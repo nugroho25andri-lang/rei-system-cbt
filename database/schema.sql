@@ -253,6 +253,49 @@ CREATE TABLE `evaluasi_trainer` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `penilaian_trainer`
+--
+
+DROP TABLE IF EXISTS `penilaian_trainer`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `penilaian_trainer` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `id_peserta` int NOT NULL,
+  `nip` varchar(100) NOT NULL,
+  `nama_peserta` varchar(150) NOT NULL,
+  `batch` varchar(255) NOT NULL,
+  `trainer` varchar(100) NOT NULL,
+  `day_ke` tinyint NOT NULL,
+  `tanggal` date NOT NULL,
+  `jam_mulai` time NOT NULL,
+  `jam_selesai` time NOT NULL,
+  `durasi_menit` int NOT NULL,
+  `nilai_1` tinyint NOT NULL,
+  `nilai_2` tinyint NOT NULL,
+  `nilai_3` tinyint NOT NULL,
+  `nilai_4` tinyint NOT NULL,
+  `nilai_5` tinyint NOT NULL,
+  `nilai_6` tinyint NOT NULL,
+  `nilai_7` tinyint NOT NULL,
+  `nilai_8` tinyint NOT NULL,
+  `nilai_9` tinyint NOT NULL,
+  `nilai_10` tinyint NOT NULL,
+  `rata_rata` decimal(4,2) NOT NULL,
+  `hal_terbaik` text,
+  `perbaikan` text,
+  `sumber` enum('portal','kode') NOT NULL DEFAULT 'portal',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_penilaian_trainer` (`id_peserta`,`trainer`,`tanggal`),
+  KEY `idx_penilaian_batch` (`batch`),
+  KEY `idx_penilaian_trainer` (`trainer`),
+  KEY `idx_penilaian_tanggal` (`tanggal`),
+  CONSTRAINT `fk_penilaian_trainer_peserta` FOREIGN KEY (`id_peserta`) REFERENCES `peserta` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `jawaban_3month_review`
 --
 

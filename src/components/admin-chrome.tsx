@@ -22,6 +22,9 @@ const icons = {
   recap: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="m7 15 4-4 3 3 5-6" /></svg>
   ),
+  trainer: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2 9.2 4.5H5.5v4.3L3 12l2.5 3.2v4.3h3.7L12 22l2.8-2.5h3.7v-4.3L21 12l-2.5-3.2V4.5h-3.7Z" /><path d="m9 12 2 2 4-4" /></svg>
+  ),
   aadl: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
   ),
@@ -71,6 +74,7 @@ const SECTIONS: { heading: string; items: NavItem[] }[] = [
       { label: "Rekapitulasi Nilai", href: "/rekapitulasi", icon: "recap", roles: ALL_ROLES },
       { label: "Input Nilai AADL", href: "/input-nilai", icon: "aadl", roles: ALL_ROLES },
       { label: "Penilaian Day 6", href: "/test-day6", icon: "day6", roles: ALL_ROLES },
+      { label: "Analisis Penilaian Trainer", href: "/analisis-trainer", icon: "trainer", roles: ["superadmin", "admin"] },
     ],
   },
   {
@@ -92,6 +96,7 @@ const TITLES: Record<string, string> = {
   "/rekapitulasi": "Rekapitulasi Nilai",
   "/input-nilai": "Input Nilai AADL",
   "/test-day6": "Penilaian Day 6",
+  "/analisis-trainer": "Analisis Penilaian Trainer",
   "/akun": "Manajemen Akun",
   "/aktivitas": "Log Aktivitas",
   "/database": "Database",
