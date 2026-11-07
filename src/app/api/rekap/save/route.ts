@@ -40,11 +40,11 @@ export async function POST(request: Request) {
     const [participantRows] = await connection.execute("SELECT id FROM peserta WHERE id=? LIMIT 1", [participantId]);
     if (!(participantRows as unknown[]).length) throw new Error("Peserta tidak ditemukan.");
     for (const dayNumber of [1, 2, 3, 4]) {
-      const [primaryRows] = await connection.execute("SELECT j.id FROM jawaban_peserta j INNER JOIN soal s ON j.id_soal=s.id WHERE j.id_peserta=? AND CAST(NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(LOWER(TRIM(s.day)),'day',-1),' ',1),'') AS UNSIGNED)=? ORDER BY j.id ASC", [participantId, dayNumber]);
+      const [primaryRows] = await connection.execute("SELECT j.id FROM jawaban_peserta j INNER JOIN soal s ON j.id_soal=s.id WHERE j.id_peserta=? AND s.jenis_tes='posttest' AND CAST(NULLIF(SUBSTRING_INDEX(SUBSTRING_INDEX(LOWER(TRIM(s.day)),'day',-1),' ',1),'') AS UNSIGNED)=? ORDER BY j.id ASC", [participantId, dayNumber]);
       let ids = (primaryRows as Array<{ id: number }>).map((row) => Number(row.id));
       if (!ids.length) {
         const regex = `(^|[^0-9])day[[:space:]]*${dayNumber}([^0-9]|$)`;
-        const [fallbackRows] = await connection.execute("SELECT j.id FROM jawaban_peserta j INNER JOIN soal s ON j.id_soal=s.id WHERE j.id_peserta=? AND (LOWER(TRIM(s.day)) REGEXP ? OR LOWER(TRIM(s.day))=?) ORDER BY j.id ASC", [participantId, regex, String(dayNumber)]);
+        const [fallbackRows] = await connection.execute("SELECT j.id FROM jawaban_peserta j INNER JOIN soal s ON j.id_soal=s.id WHERE j.id_peserta=? AND s.jenis_tes='posttest' AND (LOWER(TRIM(s.day)) REGEXP ? OR LOWER(TRIM(s.day))=?) ORDER BY j.id ASC", [participantId, regex, String(dayNumber)]);
         ids = (fallbackRows as Array<{ id: number }>).map((row) => Number(row.id));
       }
       if (!ids.length) { noAnswers.push(`Day ${dayNumber}`); continue; }

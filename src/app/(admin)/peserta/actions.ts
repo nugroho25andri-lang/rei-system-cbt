@@ -1,4 +1,5 @@
 "use server";
+import { hash } from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logAdminActivity } from "@/lib/activity";
@@ -37,6 +38,28 @@ export async function savePesertaAction(form: FormData) {
   });
   revalidatePath("/admin");
   redirect(`${returnTo}?msg=added`);
+}
+export async function changePesertaPasswordAction(form: FormData) {
+  const session = await requireAdmin();
+  const id = Number(form.get("id"));
+  const password = String(form.get("password") ?? "");
+  if (!Number.isInteger(id) || id <= 0) redirect("/peserta?msg=notfound");
+  if (password.length < 6) redirect("/peserta?msg=invalid-password");
+
+  const [rows] = await db.execute("SELECT id,nama_peserta,nip FROM peserta WHERE id=? LIMIT 1", [id]);
+  const participant = (rows as Array<{ id: number; nama_peserta: string; nip: string }>)[0];
+  if (!participant) redirect("/peserta?msg=notfound");
+
+  await db.execute("UPDATE peserta SET password=? WHERE id=?", [await hash(password, 10), participant.id]);
+  await logAdminActivity({
+    action: "participant_password",
+    session,
+    entity: "peserta",
+    entityId: participant.id,
+    detail: `Password peserta ${participant.nama_peserta} (NIP ${participant.nip}) diubah oleh admin.`,
+  });
+  revalidatePath("/peserta");
+  redirect("/peserta?msg=password");
 }
 export async function deletePesertaAction(form: FormData) {
   const session = await requireAdmin();

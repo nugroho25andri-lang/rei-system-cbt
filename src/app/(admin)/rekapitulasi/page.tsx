@@ -7,10 +7,12 @@ import { btnPrimary, Card, inputClass, Notice, PageHeader, selectClass, Stat, Ta
 export const dynamic = "force-dynamic";
 const joins = `
   LEFT JOIN (SELECT j.id_peserta,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes1,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes2,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes3,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*4$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes4
+    SUM(CASE WHEN s.jenis_tes='pretest' THEN COALESCE(j.nilai,0) ELSE 0 END) nilai_pretest,
+    SUM(CASE WHEN s.jenis_tes='posttest' THEN COALESCE(j.nilai,0) ELSE 0 END) nilai_posttest,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes1,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes2,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes3,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*4$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes4
     FROM jawaban_peserta j LEFT JOIN soal s ON j.id_soal=s.id GROUP BY j.id_peserta) t14 ON p.id=t14.id_peserta
   LEFT JOIN (SELECT d.id_peserta,d.nilai_akhir FROM penilaian_day5 d JOIN (SELECT id_peserta,MAX(id) max_id FROM penilaian_day5 GROUP BY id_peserta) x ON x.id_peserta=d.id_peserta AND x.max_id=d.id) d5 ON p.id=d5.id_peserta
   LEFT JOIN (SELECT d.id_peserta,d.nilai_akhir FROM penilaian_day6 d JOIN (SELECT id_peserta,MAX(id) max_id FROM penilaian_day6 GROUP BY id_peserta) x ON x.id_peserta=d.id_peserta AND x.max_id=d.id) d6 ON p.id=d6.id_peserta
@@ -51,10 +53,10 @@ function RankTable({ rows, tone, empty }: { rows: RankRow[]; tone: "top" | "bott
 }
 const statsJoins = `
   LEFT JOIN (SELECT j.id_peserta,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes1,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes2,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes3,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*4$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes4
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes1,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes2,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes3,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*4$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes4
     FROM jawaban_peserta j LEFT JOIN soal s ON j.id_soal=s.id GROUP BY j.id_peserta) t14 ON p.id=t14.id_peserta
   LEFT JOIN (SELECT id_peserta,MAX(nilai_akhir) nilai_akhir FROM penilaian_day5 GROUP BY id_peserta) d5 ON p.id=d5.id_peserta
   LEFT JOIN (SELECT id_peserta,MAX(nilai_akhir) nilai_akhir FROM penilaian_day6 GROUP BY id_peserta) d6 ON p.id=d6.id_peserta
@@ -74,7 +76,7 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
   const filterSql = ` WHERE (?='' OR p.batch=?) AND (?='' OR p.nama_peserta LIKE ? OR p.nip LIKE ?)`;
   const like = `%${q}%`;
   const [rowsResult, batchesResult, countResult, totalResult, failResult, batchCountResult, topResult, bottomResult] = await Promise.all([
-    db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,COALESCE(t14.tes1,0) tes1,COALESCE(t14.tes2,0) tes2,COALESCE(t14.tes3,0) tes3,COALESCE(t14.tes4,0) tes4,COALESCE(d5.nilai_akhir,0) tes5,COALESCE(d6.nilai_akhir,0) tes6,COALESCE(aadl.total_manual,0) nilai_aadl,${totalExpression} total_nilai FROM peserta p ${joins}${filterSql} ORDER BY p.id DESC LIMIT 70 OFFSET ?`, [batch,batch,q,like,like,offset]),
+    db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,COALESCE(t14.nilai_pretest,0) nilai_pretest,COALESCE(t14.nilai_posttest,0) nilai_posttest,COALESCE(t14.tes1,0) tes1,COALESCE(t14.tes2,0) tes2,COALESCE(t14.tes3,0) tes3,COALESCE(t14.tes4,0) tes4,COALESCE(d5.nilai_akhir,0) tes5,COALESCE(d6.nilai_akhir,0) tes6,COALESCE(aadl.total_manual,0) nilai_aadl,${totalExpression} total_nilai FROM peserta p ${joins}${filterSql} ORDER BY p.id DESC LIMIT 70 OFFSET ?`, [batch,batch,q,like,like,offset]),
     db.execute("SELECT DISTINCT batch FROM peserta WHERE batch IS NOT NULL AND batch<>'' ORDER BY batch DESC"),
     db.execute(`SELECT COUNT(*) total FROM peserta p ${filterSql}`, [batch,batch,q,like,like]),
     db.execute(`SELECT COUNT(*) total, SUM(total_nilai>=?) passed FROM (SELECT p.id,${totalExpression} total_nilai FROM peserta p ${statsJoins}) grades`, [kkm]),
@@ -106,7 +108,7 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
     <>
       <PageHeader
         title="Rekapitulasi Nilai"
-        description={`Monitoring hasil ujian peserta CBT REI · KKM ${kkm}`}
+        description={`Pretest dan posttest ditampilkan terpisah; hanya posttest masuk total nilai · KKM ${kkm}`}
         actions={<a className={btnPrimary} href={`/rekapitulasi/export?${new URLSearchParams({ batch, q })}`}>Export Excel</a>}
       />
       {params.saved === "1" && <Notice>Nilai berhasil disimpan.</Notice>}

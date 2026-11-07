@@ -80,25 +80,33 @@ async function handle(request: Request) {
   if (request.method === "POST" && (action === "check_token" || action === "verifikasi_token")) {
     const form = await request.formData();
     const day = String(form.get("day") ?? "").trim();
+    const jenisTes = String(form.get("jenis_tes") ?? "").trim();
     const token = String(form.get("token") ?? "").trim();
     const participantId = Number(form.get("id_peserta"));
     if (!day) return jsonError("Hari ujian belum dipilih.");
+    if (jenisTes !== "pretest" && jenisTes !== "posttest") return jsonError("Pilih pretest atau posttest.");
     if (!token) return jsonError("Kode akses / token wajib diisi.");
     if (!Number.isInteger(participantId) || participantId <= 0) return jsonError("Peserta wajib dipilih.");
     const [rows] = await db.execute("SELECT id,day,token_code FROM tokens WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) LIMIT 1", [day]);
     const row = (rows as Array<{ id: number; day: string; token_code: string }>)[0];
     if (!row) return jsonError(`Token untuk ${day} belum tersedia.`);
     if (String(row.token_code).trim().toUpperCase() !== token.toUpperCase()) return jsonError(`Kode akses / token salah untuk ${day}.`);
-    const ticket = await new SignJWT({ day: row.day, participantId, tokenId: row.id, purpose: "exam" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("4h").sign(sessionKey());
-    const response = NextResponse.json({ status: "success", message: "Token valid.", day: row.day });
+    if (day !== "Day 5") {
+      const [questionRows] = await db.execute("SELECT id FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=? LIMIT 1", [day, jenisTes]);
+      if (!(questionRows as unknown[]).length) return jsonError(`Soal ${jenisTes} untuk ${day} belum tersedia.`);
+    }
+    const ticket = await new SignJWT({ day: row.day, jenisTes, participantId, tokenId: row.id, purpose: "exam" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("4h").sign(sessionKey());
+    const response = NextResponse.json({ status: "success", message: "Token valid.", day: row.day, jenis_tes: jenisTes });
     response.cookies.set("cbt_exam_ticket", ticket, { httpOnly: true, secure: cookieSecure(), sameSite: "strict", path: "/", maxAge: 4 * 60 * 60 });
     return response;
   }
 
   if (request.method === "GET" && action === "get_soal") {
     const day = (url.searchParams.get("day") ?? "").trim();
+    const jenisTes = (url.searchParams.get("jenis_tes") ?? "").trim();
     if (!day) return jsonError("Parameter day kosong");
-    const [rows] = await db.execute("SELECT id,no_soal,pertanyaan,gambar,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) ORDER BY no_soal ASC", [day]);
+    if (jenisTes !== "pretest" && jenisTes !== "posttest") return jsonError("Parameter jenis_tes tidak valid");
+    const [rows] = await db.execute("SELECT id,no_soal,pertanyaan,gambar,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=? ORDER BY no_soal ASC", [day, jenisTes]);
     const data = (rows as Array<{ id: number; no_soal: number; pertanyaan: string; gambar: string | null; bobot: number; waktu_soal: number; jenis_soal: string; pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null }>).map((row) => ({ ...row, jenis_soal: row.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : row.jenis_soal === "upload" ? "upload" : "esai", waktu_soal: Number(row.waktu_soal) || 0, gambar: imageUrl(row.gambar) }));
     return data.length ? NextResponse.json({ status: "success", data }) : jsonError(`Tidak ada soal untuk: '${day}'`);
   }
@@ -158,10 +166,12 @@ async function handle(request: Request) {
     try { form = await request.formData(); } catch { return jsonError("Berkas gagal dibaca. Silakan pilih ulang."); }
     const file = form.get("file");
     const day = String(form.get("day") ?? "").trim();
+    const jenisTes = String(form.get("jenis_tes") ?? "").trim();
     const noSoal = Number(form.get("no_soal"));
     if (!day) return jsonError("Hari ujian tidak ditemukan.");
+    if (jenisTes !== "pretest" && jenisTes !== "posttest") return jsonError("Jenis tes tidak valid.");
     if (!Number.isInteger(noSoal) || noSoal <= 0) return jsonError("Nomor soal tidak valid.");
-    if (String(ticketPayload.day ?? "").toLowerCase() !== day.toLowerCase()) return jsonError("Sesi token tidak sesuai dengan ujian ini.");
+    if (String(ticketPayload.day ?? "").toLowerCase() !== day.toLowerCase() || ticketPayload.jenisTes !== jenisTes) return jsonError("Sesi token tidak sesuai dengan ujian ini.");
     if (!(file instanceof File) || file.size === 0) return jsonError("Pilih berkas jawaban terlebih dahulu.");
     if (file.size > ANSWER_FILE_MAX_BYTES) return jsonError("Ukuran berkas maksimal 8 MB.");
     const extension =
@@ -173,8 +183,8 @@ async function handle(request: Request) {
     const participantId = Number(ticketPayload.participantId);
     if (!Number.isInteger(participantId) || participantId <= 0) return jsonError("Peserta tidak sesuai dengan sesi ujian.");
     const [questionRows] = await db.execute(
-      "SELECT id FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND no_soal=? AND jenis_soal='upload' LIMIT 1",
-      [day, noSoal],
+      "SELECT id FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=? AND no_soal=? AND jenis_soal='upload' LIMIT 1",
+      [day, jenisTes, noSoal],
     );
     const questionId = Number((questionRows as Array<{ id: number }>)[0]?.id ?? 0);
     if (!questionId) return jsonError("Soal upload untuk nomor ini tidak ditemukan.");
@@ -194,9 +204,11 @@ async function handle(request: Request) {
     try { payload = await request.json() as Record<string, unknown>; } catch { return jsonError("Payload tidak valid."); }
     const nip = String(payload.nip ?? "").trim();
     const day = String(payload.day ?? "").trim();
+    const jenisTes = String(payload.jenisTes ?? "").trim();
     const answers = Array.isArray(payload.listJawaban) ? payload.listJawaban as Array<Record<string, unknown>> : [];
     if (!nip) return jsonError("NIP peserta tidak ditemukan.");
     if (!day) return jsonError("Hari ujian tidak ditemukan.");
+    if (jenisTes !== "pretest" && jenisTes !== "posttest") return jsonError("Jenis tes tidak valid.");
     if (!answers.length) return jsonError("Tidak ada jawaban yang dikirim.");
 
     const cookieHeader = request.headers.get("cookie") ?? "";
@@ -205,7 +217,7 @@ async function handle(request: Request) {
     let ticketPayload;
     try { ticketPayload = (await jwtVerify(decodeURIComponent(ticket), sessionKey())).payload; }
     catch { return jsonError("Sesi token ujian kedaluwarsa. Silakan verifikasi token kembali."); }
-    if (ticketPayload.purpose !== "exam" || String(ticketPayload.day).toLowerCase() !== day.toLowerCase()) return jsonError("Sesi token tidak sesuai dengan ujian ini.");
+    if (ticketPayload.purpose !== "exam" || String(ticketPayload.day).toLowerCase() !== day.toLowerCase() || ticketPayload.jenisTes !== jenisTes) return jsonError("Sesi token tidak sesuai dengan ujian ini.");
 
     const [participants] = await db.execute("SELECT id FROM peserta WHERE nip = ? LIMIT 1", [nip]);
     const pesertaId = Number((participants as Array<{ id: number }>)[0]?.id ?? 0);
@@ -213,8 +225,8 @@ async function handle(request: Request) {
     if (Number(ticketPayload.participantId) !== pesertaId) return jsonError("Peserta tidak sesuai dengan sesi ujian.");
 
     const [questionResult, keywordResult] = await Promise.all([
-      db.execute("SELECT id,no_soal,bobot,jenis_soal,jawaban_benar FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?))", [day]),
-      db.execute("SELECT k.id_soal,k.kata_kunci,k.bobot FROM soal_kata_kunci k INNER JOIN soal s ON s.id=k.id_soal WHERE LOWER(TRIM(s.day))=LOWER(TRIM(?))", [day]),
+      db.execute("SELECT id,no_soal,bobot,jenis_soal,jawaban_benar FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=?", [day, jenisTes]),
+      db.execute("SELECT k.id_soal,k.kata_kunci,k.bobot FROM soal_kata_kunci k INNER JOIN soal s ON s.id=k.id_soal WHERE LOWER(TRIM(s.day))=LOWER(TRIM(?)) AND s.jenis_tes=?", [day, jenisTes]),
     ]);
     const questionRows = questionResult[0];
     const keywordRows = keywordResult[0];
@@ -239,7 +251,7 @@ async function handle(request: Request) {
     const connection = await db.getConnection();
     try {
       await connection.beginTransaction();
-      await connection.execute("DELETE jp FROM jawaban_peserta jp INNER JOIN soal s ON jp.id_soal=s.id WHERE jp.id_peserta=? AND LOWER(TRIM(s.day))=LOWER(TRIM(?))", [pesertaId, day]);
+      await connection.execute("DELETE jp FROM jawaban_peserta jp INNER JOIN soal s ON jp.id_soal=s.id WHERE jp.id_peserta=? AND LOWER(TRIM(s.day))=LOWER(TRIM(?)) AND s.jenis_tes=?", [pesertaId, day, jenisTes]);
       for (const answer of answers) {
         const noSoal = Number(answer.noSoal) || 0;
         const question = questions.get(noSoal);

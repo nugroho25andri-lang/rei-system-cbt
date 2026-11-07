@@ -18,9 +18,10 @@ const messages: Record<string, string> = {
 };
 const successMessages = new Set(["added", "updated", "banyak"]);
 
-export default async function KelolaSoalPage({ searchParams }: { searchParams: Promise<{ q?: string; msg?: string; count?: string }> }) {
+export default async function KelolaSoalPage({ searchParams }: { searchParams: Promise<{ q?: string; jenis_tes?: string; msg?: string; count?: string }> }) {
   await requireRole(["superadmin", "admin", "hr_staff"]);
-  const { q = "", msg, count } = await searchParams;
+  const { q = "", jenis_tes: requestedTestType = "", msg, count } = await searchParams;
+  const jenisTes = requestedTestType === "pretest" || requestedTestType === "posttest" ? requestedTestType : "";
   const [columnRows, daysRows, statsRows, kkmRows, nextRows] = await Promise.all([
     db.execute("SELECT column_name AS name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='soal' AND column_name IN ('pertanyaan','pertanyaaan')"),
     db.execute("SELECT DISTINCT day FROM soal WHERE day IS NOT NULL AND TRIM(day)<>'' ORDER BY day"),
@@ -30,7 +31,7 @@ export default async function KelolaSoalPage({ searchParams }: { searchParams: P
   ]);
   const columns = (columnRows[0] as Array<{ name: string }>).map((row) => row.name);
   const column = columns.includes("pertanyaan") ? "pertanyaan" : "pertanyaaan";
-  const [questionRows] = await db.execute(`SELECT id,day,no_soal,\`${column}\` AS pertanyaan,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar FROM soal WHERE \`${column}\` LIKE ? OR kata_kunci LIKE ? OR day LIKE ? ORDER BY id DESC`, [`%${q}%`, `%${q}%`, `%${q}%`]);
+  const [questionRows] = await db.execute(`SELECT id,day,jenis_tes,no_soal,\`${column}\` AS pertanyaan,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar FROM soal WHERE (\`${column}\` LIKE ? OR kata_kunci LIKE ? OR day LIKE ?) AND (?='' OR jenis_tes=?) ORDER BY id DESC`, [`%${q}%`, `%${q}%`, `%${q}%`, jenisTes, jenisTes]);
   const [keywordRows] = await db.execute("SELECT id_soal,kata_kunci,bobot FROM soal_kata_kunci ORDER BY id_soal,id");
   const keywordMap = new Map<number, Array<{ kata_kunci: string; bobot: number }>>();
   for (const row of keywordRows as Array<{ id_soal: number; kata_kunci: string; bobot: number | string }>) {
@@ -76,7 +77,7 @@ export default async function KelolaSoalPage({ searchParams }: { searchParams: P
 
       <Card
         title={`Daftar Soal (${questionList.length})`}
-        actions={<form action="/kelola-soal" className="flex items-center gap-2"><input className={`${inputClass} max-w-64`} name="q" defaultValue={q} placeholder="Cari soal, kata kunci, atau day" /><button type="submit" className={btnPrimary}>Cari</button></form>}
+        actions={<form action="/kelola-soal" className="flex flex-wrap items-center gap-2"><select className="min-w-32 rounded-lg border border-rei-900/15 bg-white px-3 py-2 text-sm" name="jenis_tes" defaultValue={jenisTes}><option value="">Semua tes</option><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select><input className={`${inputClass} max-w-64`} name="q" defaultValue={q} placeholder="Cari soal, kata kunci, atau day" /><button type="submit" className={btnPrimary}>Cari</button></form>}
         bodyClassName="px-5 pb-4 pt-2"
       >
         <QuestionManager questions={questionList} days={days} />

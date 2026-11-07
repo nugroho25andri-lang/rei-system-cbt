@@ -10,6 +10,7 @@ import { requireRole } from "@/lib/session";
 
 const CHOICE_FIELDS = ["pilihan_a", "pilihan_b", "pilihan_c", "pilihan_d"] as const;
 type QuestionType = "esai" | "pilihan_ganda" | "upload";
+type ExamType = "pretest" | "posttest";
 
 export type BulkState = { ok: boolean; message: string } | null;
 
@@ -20,8 +21,8 @@ async function questionColumn() {
 }
 
 type Normalized =
-  | { error: "invalid" | "pg-lengkap" | "pg-kunci" | "keyword-bobot" }
-  | { error: ""; day: string; noSoal: number; pertanyaan: string; keywords: string; keywordList: KeywordWeight[]; bobot: number; waktuSoal: number; jenis: QuestionType; choices: string[]; answerKey: string };
+  | { error: "invalid" | "invalid-tes" | "pg-lengkap" | "pg-kunci" | "keyword-bobot" }
+  | { error: ""; day: string; jenisTes: ExamType; noSoal: number; pertanyaan: string; keywords: string; keywordList: KeywordWeight[]; bobot: number; waktuSoal: number; jenis: QuestionType; choices: string[]; answerKey: string };
 
 function normalizeKeywords(input: Record<string, unknown>, bobot: number): KeywordWeight[] {
   if (Array.isArray(input.keyword_list)) {
@@ -35,6 +36,9 @@ function normalizeKeywords(input: Record<string, unknown>, bobot: number): Keywo
 
 function normalize(input: Record<string, unknown>): Normalized {
   const day = String(input.day ?? "").trim() || "Day 1";
+  const rawExamType = String(input.jenis_tes ?? "posttest").trim();
+  if (rawExamType !== "pretest" && rawExamType !== "posttest") return { error: "invalid-tes" };
+  const jenisTes: ExamType = rawExamType;
   const noSoal = Math.trunc(Number(input.no_soal));
   const pertanyaan = String(input.pertanyaan ?? "").trim();
   const bobot = Math.trunc(Number(input.bobot));
@@ -51,12 +55,12 @@ function normalize(input: Record<string, unknown>): Normalized {
   const keywordTotal = keywordList.reduce((sum, item) => sum + item.bobot, 0);
   if (jenis === "esai" && keywordTotal > bobot + 0.001) return { error: "keyword-bobot" };
   const keywords = keywordList.map((item) => item.kata_kunci).join(", ");
-  return { error: "", day, noSoal, pertanyaan, keywords, keywordList, bobot, waktuSoal, jenis, choices, answerKey };
+  return { error: "", day, jenisTes, noSoal, pertanyaan, keywords, keywordList, bobot, waktuSoal, jenis, choices, answerKey };
 }
 
 function inputFromForm(form: FormData): Record<string, unknown> {
   const input: Record<string, unknown> = {};
-  for (const field of ["day", "no_soal", "pertanyaan", "kata_kunci", "bobot", "waktu_soal", "jenis_soal", "jawaban_benar", ...CHOICE_FIELDS]) {
+  for (const field of ["day", "jenis_tes", "no_soal", "pertanyaan", "kata_kunci", "bobot", "waktu_soal", "jenis_soal", "jawaban_benar", ...CHOICE_FIELDS]) {
     input[field] = form.get(field);
   }
   const names = form.getAll("kata_kunci[]").map((value) => String(value).trim());
@@ -71,6 +75,7 @@ function inputFromForm(form: FormData): Record<string, unknown> {
 function params(question: Extract<Normalized, { error: "" }>, gambar: string | null) {
   return [
     question.day,
+    question.jenisTes,
     question.noSoal,
     question.pertanyaan,
     question.jenis === "esai" ? question.keywords : "",
@@ -108,7 +113,7 @@ export async function addSoalAction(form: FormData) {
   if (gambar && ["gambar-tipe", "gambar-ukuran", "gambar-gagal"].includes(gambar)) redirect(`/kelola-soal?msg=${gambar}`);
   const column = await questionColumn();
   const [result] = await db.execute(
-    `INSERT INTO soal (day,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO soal (day,jenis_tes,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     params(question, gambar),
   );
   const insertedId = Number((result as { insertId?: number }).insertId ?? 0);
@@ -118,7 +123,7 @@ export async function addSoalAction(form: FormData) {
     session,
     entity: "soal",
     entityId: (result as { insertId?: number }).insertId ?? null,
-    detail: `${question.day} nomor ${question.noSoal}: ${question.pertanyaan}`,
+    detail: `${question.jenisTes} · ${question.day} nomor ${question.noSoal}: ${question.pertanyaan}`,
   });
   revalidatePath("/kelola-soal");
   redirect("/kelola-soal?msg=added");
@@ -147,7 +152,7 @@ export async function updateSoalAction(form: FormData) {
 
   const column = await questionColumn();
   await db.execute(
-    `UPDATE soal SET day=?,no_soal=?,\`${column}\`=?,kata_kunci=?,bobot=?,waktu_soal=?,jenis_soal=?,pilihan_a=?,pilihan_b=?,pilihan_c=?,pilihan_d=?,jawaban_benar=?,gambar=? WHERE id=?`,
+    `UPDATE soal SET day=?,jenis_tes=?,no_soal=?,\`${column}\`=?,kata_kunci=?,bobot=?,waktu_soal=?,jenis_soal=?,pilihan_a=?,pilihan_b=?,pilihan_c=?,pilihan_d=?,jawaban_benar=?,gambar=? WHERE id=?`,
     [...params(question, gambar), id],
   );
   await replaceKeywords(db, id, question.keywordList);
@@ -156,7 +161,7 @@ export async function updateSoalAction(form: FormData) {
     session,
     entity: "soal",
     entityId: id,
-    detail: `${question.day} nomor ${question.noSoal}: ${question.pertanyaan}`,
+    detail: `${question.jenisTes} · ${question.day} nomor ${question.noSoal}: ${question.pertanyaan}`,
   });
   revalidatePath("/kelola-soal");
   redirect("/kelola-soal?msg=updated");
@@ -164,6 +169,7 @@ export async function updateSoalAction(form: FormData) {
 
 const bulkErrors: Record<string, string> = {
   invalid: "lengkapi pertanyaan, nomor soal, bobot, dan waktu soal (0–86400 detik).",
+  "invalid-tes": "pilih jenis tes pretest atau posttest.",
   "pg-lengkap": "pilihan A sampai D wajib diisi.",
   "pg-kunci": "kunci jawaban wajib A, B, C, atau D.",
   "keyword-bobot": "total bobot kata kunci tidak boleh melebihi bobot soal.",
@@ -194,7 +200,7 @@ export async function addManySoalAction(_previous: BulkState, form: FormData): P
     await connection.beginTransaction();
     for (const question of questions) {
       const [inserted] = await connection.execute(
-        `INSERT INTO soal (day,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO soal (day,jenis_tes,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         params(question, null),
       );
       const keywordQuestionId = Number((inserted as { insertId?: number }).insertId ?? 0);
@@ -213,7 +219,7 @@ export async function addManySoalAction(_previous: BulkState, form: FormData): P
     action: "question_bulk",
     session,
     entity: "soal",
-    detail: `${questions.length} soal ditambahkan untuk ${[...new Set(questions.map((question) => question.day))].join(", ")}.`,
+    detail: `${questions.length} soal ${[...new Set(questions.map((question) => question.jenisTes))].join("/")} ditambahkan untuk ${[...new Set(questions.map((question) => question.day))].join(", ")}.`,
   });
   redirect(`/kelola-soal?msg=banyak&count=${questions.length}`);
 }

@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/session";
-import { deletePesertaAction, importPesertaAction, savePesertaAction } from "./actions";
+import { changePesertaPasswordAction, deletePesertaAction, importPesertaAction, savePesertaAction } from "./actions";
 import { btnDanger, btnGhost, btnPrimary, Card, inputClass, Notice, PageHeader, Stat, TableWrap, tdClass, thClass } from "@/components/ui";
 
 type Peserta = { id: number; nip: string; nama_peserta: string; jabatan: string; batch: number; cabang: string; penempatan: string };
-const messages: Record<string, string> = { added: "Peserta baru berhasil ditambahkan.", updated: "Data peserta berhasil diperbarui.", imported: "Data peserta berhasil diimpor.", deleted: "Peserta berhasil dihapus.", invalid: "Data yang dikirim belum lengkap atau tidak valid." };
+const messages: Record<string, string> = { added: "Peserta baru berhasil ditambahkan.", updated: "Data peserta berhasil diperbarui.", imported: "Data peserta berhasil diimpor.", deleted: "Peserta berhasil dihapus.", password: "Password peserta berhasil diubah.", "invalid-password": "Password minimal 6 karakter.", notfound: "Peserta tidak ditemukan.", invalid: "Data yang dikirim belum lengkap atau tidak valid." };
 const fields = ["nip", "nama_peserta", "jabatan", "batch", "cabang", "penempatan"] as const;
 
 export default async function PesertaPage({ searchParams }: { searchParams: Promise<{ q?: string; msg?: string; count?: string }> }) {
@@ -16,7 +16,7 @@ export default async function PesertaPage({ searchParams }: { searchParams: Prom
     db.execute("SELECT COUNT(*) AS total FROM peserta"),
     db.execute("SELECT COUNT(DISTINCT batch) AS total FROM peserta"),
     db.execute("SELECT nilai_kkm FROM kkm LIMIT 1"),
-    db.execute("SELECT COUNT(DISTINCT id_peserta) AS total FROM jawaban_peserta WHERE nilai >= COALESCE((SELECT nilai_kkm FROM kkm LIMIT 1),75)"),
+    db.execute("SELECT COUNT(DISTINCT j.id_peserta) AS total FROM jawaban_peserta j INNER JOIN soal s ON s.id=j.id_soal WHERE s.jenis_tes='posttest' AND j.nilai >= COALESCE((SELECT nilai_kkm FROM kkm LIMIT 1),75)"),
   ]);
   const peserta = rows[0] as Peserta[];
   const total = Number((stats[0] as Array<{ total: number }>)[0]?.total ?? 0);
@@ -26,7 +26,7 @@ export default async function PesertaPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <PageHeader title="Data Peserta" description="Kelola data peserta training CBT Raja Emas Indonesia." actions={<a className={btnGhost} href={`/peserta/export${q ? `?q=${encodeURIComponent(q)}` : ""}`}>Export CSV</a>} />
-      {msg && messages[msg] && <Notice kind={msg === "invalid" ? "error" : "success"}>{messages[msg]}{msg === "imported" && count ? ` (${count} baris)` : ""}</Notice>}
+      {msg && messages[msg] && <Notice kind={msg === "invalid" || msg === "invalid-password" || msg === "notfound" ? "error" : "success"}>{messages[msg]}{msg === "imported" && count ? ` (${count} baris)` : ""}</Notice>}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Stat label="Total Peserta" value={total} />
@@ -90,6 +90,17 @@ export default async function PesertaPage({ searchParams }: { searchParams: Prom
                     <input type="hidden" name="id" value={row.id} />
                     <button className={btnDanger} type="submit">Hapus</button>
                   </form>
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-xs font-bold text-rei-900/60 hover:text-gold-600">Ganti password</summary>
+                    <form action={changePesertaPasswordAction} className="mt-2 grid min-w-[260px] gap-2 rounded-xl border border-rei-900/10 bg-rei-100/50 p-3">
+                      <input type="hidden" name="id" value={row.id} />
+                      <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-rei-900/50">
+                        Password baru
+                        <input className={inputClass} type="password" name="password" required minLength={6} autoComplete="new-password" />
+                      </label>
+                      <button type="submit" className={btnPrimary}>Simpan password</button>
+                    </form>
+                  </details>
                 </td>
               </tr>
             ))}

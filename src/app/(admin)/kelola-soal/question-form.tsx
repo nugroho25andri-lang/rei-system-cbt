@@ -29,6 +29,7 @@ export default function QuestionForm({ days }: { days: string[] }) {
   return (
     <form action={addSoalAction} encType="multipart/form-data" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <label className={label}>Day<select name="day" defaultValue={days[0]} className={selectClass}>{days.map((day) => <option key={day}>{day}</option>)}</select></label>
+      <label className={label}>Jenis tes<select name="jenis_tes" defaultValue="posttest" className={selectClass}><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select></label>
       <label className={label}>Nomor soal<input className={inputClass} name="no_soal" type="number" min="1" defaultValue="1" required /></label>
       <label className={label}>Jenis soal
         <select name="jenis_soal" className={selectClass} value={jenis} onChange={(event) => setJenis(event.target.value as typeof jenis)}>

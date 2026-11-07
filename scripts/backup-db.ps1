@@ -1,6 +1,6 @@
 param(
   [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
-  [string]$BackupDir = "C:\backupdata-cbt_rei",
+  [string]$BackupDir = "D:\backup-database",
   [int]$RetentionDays = 90
 )
 

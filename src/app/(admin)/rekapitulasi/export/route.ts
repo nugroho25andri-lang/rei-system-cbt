@@ -7,10 +7,12 @@ export const dynamic = "force-dynamic";
 
 const joins = `
   LEFT JOIN (SELECT j.id_peserta,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes1,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes2,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes3,
-    SUM(CASE WHEN TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*4$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes4
+    SUM(CASE WHEN s.jenis_tes='pretest' THEN COALESCE(j.nilai,0) ELSE 0 END) nilai_pretest,
+    SUM(CASE WHEN s.jenis_tes='posttest' THEN COALESCE(j.nilai,0) ELSE 0 END) nilai_posttest,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes1,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes2,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes3,
+    SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*4$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes4
     FROM jawaban_peserta j LEFT JOIN soal s ON j.id_soal=s.id GROUP BY j.id_peserta) t14 ON p.id=t14.id_peserta
   LEFT JOIN (SELECT id_peserta,MAX(nilai_akhir) nilai_akhir FROM penilaian_day5 GROUP BY id_peserta) d5 ON p.id=d5.id_peserta
   LEFT JOIN (SELECT id_peserta,MAX(nilai_akhir) nilai_akhir FROM penilaian_day6 GROUP BY id_peserta) d6 ON p.id=d6.id_peserta
@@ -27,6 +29,8 @@ type Row = {
   tes2: number;
   tes3: number;
   tes4: number;
+  nilai_pretest: number;
+  nilai_posttest: number;
   tes5: number;
   tes6: number;
   nilai_aadl: number;
@@ -48,6 +52,7 @@ export async function GET(request: Request) {
   const [rowsResult, kkmRows] = await Promise.all([
     db.execute(
       `SELECT p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,
+        COALESCE(t14.nilai_pretest,0) nilai_pretest,COALESCE(t14.nilai_posttest,0) nilai_posttest,
         COALESCE(t14.tes1,0) tes1,COALESCE(t14.tes2,0) tes2,COALESCE(t14.tes3,0) tes3,COALESCE(t14.tes4,0) tes4,
         COALESCE(d5.nilai_akhir,0) tes5,COALESCE(d6.nilai_akhir,0) tes6,COALESCE(aadl.total_manual,0) nilai_aadl,
         ${totalExpression} total_nilai
@@ -74,7 +79,9 @@ export async function GET(request: Request) {
     { key: "jabatan", width: 26 },
     { key: "batch", width: 9 },
     { key: "cabang", width: 20 },
-    { key: "tes1", width: 10 },
+    { key: "pretest", width: 11 },
+    { key: "posttest", width: 11 },
+    { key: "tes1", width: 12 },
     { key: "tes2", width: 10 },
     { key: "tes3", width: 10 },
     { key: "tes4", width: 10 },
@@ -85,19 +92,19 @@ export async function GET(request: Request) {
     { key: "status", width: 14 },
   ];
 
-  sheet.mergeCells(1, 1, 1, 15);
+  sheet.mergeCells(1, 1, 1, 17);
   const title = sheet.getCell(1, 1);
   title.value = "REKAPITULASI NILAI CBT RAJA EMAS INDONESIA";
   title.font = { bold: true, size: 14, color: { argb: "FF1F1A17" } };
   title.alignment = { vertical: "middle" };
 
-  sheet.mergeCells(2, 1, 2, 15);
+  sheet.mergeCells(2, 1, 2, 17);
   const subtitle = sheet.getCell(2, 1);
   subtitle.value = `${batch ? `Batch ${batch}` : "Semua batch"}${q ? ` · Pencarian: ${q}` : ""} · KKM ${kkm} · Diekspor ${formatDate(new Date())}`;
   subtitle.font = { size: 10, color: { argb: "FF6B5E57" } };
 
   const header = sheet.getRow(4);
-  header.values = ["No", "NIP", "Nama", "Jabatan", "Batch", "Cabang", "Tes 1", "Tes 2", "Tes 3", "Tes 4", "Day 5", "Day 6", "AADL", "Total", "Status"];
+  header.values = ["No", "NIP", "Nama", "Jabatan", "Batch", "Cabang", "Pretest", "Posttest", "Post Day 1", "Post Day 2", "Post Day 3", "Post Day 4", "Day 5", "Day 6", "AADL", "Total", "Status"];
   header.height = 22;
   header.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
@@ -116,6 +123,8 @@ export async function GET(request: Request) {
       row.jabatan ?? "",
       row.batch ?? "",
       row.cabang ?? "",
+      Number(row.nilai_pretest ?? 0),
+      Number(row.nilai_posttest ?? 0),
       Number(row.tes1 ?? 0),
       Number(row.tes2 ?? 0),
       Number(row.tes3 ?? 0),
@@ -130,13 +139,13 @@ export async function GET(request: Request) {
       cell.border = { top: { style: "thin", color: { argb: "FFE8E1D8" } }, left: { style: "thin", color: { argb: "FFE8E1D8" } }, bottom: { style: "thin", color: { argb: "FFE8E1D8" } }, right: { style: "thin", color: { argb: "FFE8E1D8" } } };
       cell.font = { size: 10 };
     });
-    for (let column = 7; column <= 14; column += 1) dataRow.getCell(column).numFmt = "#,##0.##";
-    dataRow.getCell(14).font = { bold: true, size: 10 };
-    dataRow.getCell(15).font = { bold: true, size: 10, color: { argb: lulus ? "FF047857" : "FFB91C1C" } };
-    dataRow.getCell(15).alignment = { horizontal: "center" };
+    for (let column = 7; column <= 16; column += 1) dataRow.getCell(column).numFmt = "#,##0.##";
+    dataRow.getCell(16).font = { bold: true, size: 10 };
+    dataRow.getCell(17).font = { bold: true, size: 10, color: { argb: lulus ? "FF047857" : "FFB91C1C" } };
+    dataRow.getCell(17).alignment = { horizontal: "center" };
   });
 
-  if (rows.length) sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + rows.length, column: 15 } };
+  if (rows.length) sheet.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4 + rows.length, column: 17 } };
 
   const summary = workbook.addWorksheet("Ringkasan");
   summary.columns = [{ width: 28 }, { width: 42 }];

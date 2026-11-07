@@ -21,7 +21,7 @@ async function targetAccount(form: FormData): Promise<Target> {
 }
 
 export async function createAkunAction(form: FormData) {
-  const session = await requireRole(["superadmin"]);
+  const session = await requireRole(["superadmin", "admin"]);
   const username = String(form.get("username") ?? "").trim();
   const nama = String(form.get("nama") ?? "").trim();
   const password = String(form.get("password") ?? "").trim();

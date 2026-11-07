@@ -8,6 +8,7 @@ import { btnDanger, btnGhost, btnPrimary, inputClass, selectClass, TableWrap, td
 export type Question = {
   id: number;
   day: string;
+  jenis_tes: "pretest" | "posttest";
   no_soal: number;
   pertanyaan: string;
   kata_kunci: string;
@@ -97,6 +98,7 @@ function EditModal({ question, days, onClose }: { question: Question; days: stri
           <input name="id" type="hidden" value={question.id} />
           <input name="hapus_gambar" type="hidden" value={hasImage ? "0" : "1"} />
           <label className={label}>Day<select name="day" defaultValue={question.day} className={selectClass}>{days.map((day) => <option key={day}>{day}</option>)}</select></label>
+          <label className={label}>Jenis tes<select name="jenis_tes" defaultValue={question.jenis_tes} className={selectClass}><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select></label>
           <label className={label}>Nomor soal<input className={inputClass} name="no_soal" type="number" min="1" defaultValue={question.no_soal} required /></label>
           <label className={label}>Jenis soal<select name="jenis_soal" className={selectClass} value={jenis} onChange={(event) => setJenis(event.target.value as typeof jenis)}><option value="esai">Esai</option><option value="pilihan_ganda">Pilihan ganda</option><option value="upload">Upload file</option></select></label>
           <label className={label}>Bobot<input className={inputClass} name="bobot" type="number" min="1" value={bobotValue} onChange={(event) => setBobotValue(event.target.value)} required /></label>
@@ -159,12 +161,13 @@ export default function QuestionManager({ questions, days }: { questions: Questi
     <>
       <TableWrap>
         <thead className="border-b border-rei-900/10">
-          <tr>{["Day", "No", "Jenis", "Pertanyaan", "Kunci / Kata kunci", "Bobot", "Waktu", "Aksi"].map((head) => <th key={head} className={thClass}>{head}</th>)}</tr>
+          <tr>{["Day", "Tes", "No", "Jenis", "Pertanyaan", "Kunci / Kata kunci", "Bobot", "Waktu", "Aksi"].map((head) => <th key={head} className={thClass}>{head}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-rei-900/10">
           {questions.map((row) => (
             <tr key={row.id} className="hover:bg-gold-200/15">
               <td className={`${tdClass} whitespace-nowrap font-semibold`}>{row.day}</td>
+              <td className={tdClass}><span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${row.jenis_tes === "pretest" ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"}`}>{row.jenis_tes === "pretest" ? "Pretest" : "Posttest"}</span></td>
               <td className={tdClass}>{row.no_soal}</td>
               <td className={tdClass}><span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold ${row.jenis_soal === "pilihan_ganda" ? "bg-gold-200 text-gold-600" : row.jenis_soal === "upload" ? "bg-emerald-100 text-emerald-700" : "bg-rei-100 text-rei-900/70"}`}>{typeLabel(row.jenis_soal)}</span></td>
               <td className={`${tdClass} max-w-[420px]`}>
@@ -199,7 +202,7 @@ export default function QuestionManager({ questions, days }: { questions: Questi
               </td>
             </tr>
           ))}
-          {!questions.length && <tr><td colSpan={8} className="px-3 py-10 text-center text-sm text-rei-900/50">Tidak ada soal ditemukan.</td></tr>}
+          {!questions.length && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-rei-900/50">Tidak ada soal ditemukan.</td></tr>}
         </tbody>
       </TableWrap>
 

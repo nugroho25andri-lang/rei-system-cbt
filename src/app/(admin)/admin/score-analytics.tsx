@@ -35,7 +35,7 @@ async function loadAnalytics() {
     JOIN peserta p ON p.id=j.id_peserta
     JOIN soal s ON s.id=j.id_soal
     ${LATEST}
-    WHERE j.nilai IS NOT NULL AND s.bobot > 0
+    WHERE j.nilai IS NOT NULL AND s.jenis_tes='posttest' AND s.bobot > 0
     GROUP BY p.id,p.nama_peserta,p.nip,p.batch,p.cabang
     HAVING COUNT(*) >= 3
     ORDER BY rata DESC,jumlah DESC
@@ -47,7 +47,7 @@ async function loadAnalytics() {
     JOIN peserta p ON p.id=j.id_peserta
     JOIN soal s ON s.id=j.id_soal
     ${LATEST}
-    WHERE j.nilai IS NOT NULL AND s.bobot > 0
+    WHERE j.nilai IS NOT NULL AND s.jenis_tes='posttest' AND s.bobot > 0
     GROUP BY batch
     ORDER BY CAST(COALESCE(NULLIF(TRIM(p.batch),''),'0') AS UNSIGNED),batch`;
   const daySql = `
@@ -57,7 +57,7 @@ async function loadAnalytics() {
     FROM jawaban_peserta j
     JOIN soal s ON s.id=j.id_soal
     ${LATEST}
-    WHERE j.nilai IS NOT NULL AND s.bobot > 0
+    WHERE j.nilai IS NOT NULL AND s.jenis_tes='posttest' AND s.bobot > 0
     GROUP BY s.day
     ORDER BY s.day`;
   const questionSql = (direction: "ASC" | "DESC") => `
@@ -67,7 +67,7 @@ async function loadAnalytics() {
     FROM jawaban_peserta j
     JOIN soal s ON s.id=j.id_soal
     ${LATEST}
-    WHERE j.nilai IS NOT NULL AND s.bobot > 0
+    WHERE j.nilai IS NOT NULL AND s.jenis_tes='posttest' AND s.bobot > 0
     GROUP BY s.day,s.no_soal,s.jenis_soal
     HAVING COUNT(*) >= 10
     ORDER BY rata ${direction},jumlah DESC

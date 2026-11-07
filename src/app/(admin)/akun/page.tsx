@@ -31,7 +31,8 @@ const roleBadge: Record<AdminRow["role"], string> = {
 const smallButton = "inline-flex items-center justify-center rounded-lg border border-rei-900/15 bg-white px-2.5 py-1 text-[11px] font-bold text-rei-900 transition hover:border-gold-500 hover:bg-gold-200/40";
 
 export default async function AkunPage({ searchParams }: { searchParams: Promise<{ msg?: string }> }) {
-  await requireRole(["superadmin"]);
+  const session = await requireRole(["superadmin", "admin"]);
+  const isSuperadmin = session.role === "superadmin";
   const { msg } = await searchParams;
   const [rows] = await db.execute("SELECT id, username, nama_trainer, role, is_active, created_at FROM admins ORDER BY (role = 'superadmin') DESC, nama_trainer ASC");
   const accounts = rows as AdminRow[];
@@ -43,7 +44,7 @@ export default async function AkunPage({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <PageHeader title="Manajemen Akun" description="Khusus Super Admin. Buat akun Admin atau HR Staff, atur role, reset password, dan aktifkan/nonaktifkan akun." />
+      <PageHeader title="Manajemen Akun" description={isSuperadmin ? "Buat akun Admin atau HR Staff, atur role, reset password, dan aktifkan/nonaktifkan akun." : "Buat akun Admin atau HR Staff. Pengelolaan akun yang sudah ada hanya dapat dilakukan Super Admin."} />
       {msg && messages[msg] && <Notice kind={errorMessages.has(msg) ? "error" : "success"}>{messages[msg]}</Notice>}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -86,7 +87,9 @@ export default async function AkunPage({ searchParams }: { searchParams: Promise
                 <td className={tdClass}><span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${Number(row.is_active) === 1 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{Number(row.is_active) === 1 ? "Aktif" : "Nonaktif"}</span></td>
                 <td className={`${tdClass} whitespace-nowrap text-xs text-rei-900/60`}>{new Date(row.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}</td>
                 <td className={`${tdClass} min-w-[260px]`}>
-                  {row.role === "superadmin" ? (
+                  {!isSuperadmin ? (
+                    <span className="text-[11px] font-bold text-rei-900/45">Pengelolaan akun hanya untuk Super Admin</span>
+                  ) : row.role === "superadmin" ? (
                     <span className="text-[11px] font-bold text-rei-900/45">Akun utama — terkunci</span>
                   ) : (
                     <div className="flex flex-col gap-2">

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 type Participant = { id: number; nama_peserta: string; nip: string; jabatan: string | null; batch: string | null; cabang: string | null; email: string | null };
+type ExamType = "pretest" | "posttest";
 type Question = { id?: number; no_soal: number; pertanyaan: string; gambar?: string | null; bobot: number; waktu_soal?: number; jenis_soal?: string; pilihan_a?: string | null; pilihan_b?: string | null; pilihan_c?: string | null; pilihan_d?: string | null };
 type PaperOption = { value: string; label: string; text: string };
 type PaperQuestion = Question & { options: PaperOption[] };
@@ -92,13 +93,13 @@ function Steps({ current }: { current: 1 | 2 | 3 }) {
   );
 }
 
-function PortalHeader({ step, day }: { step: 1 | 2 | 3; day?: string }) {
+function PortalHeader({ step, day, examType }: { step: 1 | 2 | 3; day?: string; examType?: ExamType | "" }) {
   return (
     <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 pt-5 sm:px-6">
       <Logo />
       <div className="flex items-center gap-3">
         <Steps current={step} />
-        {day && step === 2 && <span className="rounded-full border border-gold-400/40 bg-gold-400/10 px-3 py-1.5 text-[11px] font-bold text-gold-200">{day}</span>}
+        {day && step === 2 && <span className="rounded-full border border-gold-400/40 bg-gold-400/10 px-3 py-1.5 text-[11px] font-bold text-gold-200">{day}{examType ? ` · ${examType === "pretest" ? "Pretest" : "Posttest"}` : ""}</span>}
       </div>
     </header>
   );
@@ -146,6 +147,7 @@ export default function ExamPortal() {
   const [participantTerm, setParticipantTerm] = useState("");
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [email, setEmail] = useState("");
+  const [examType, setExamType] = useState<ExamType | "">("");
   const [day, setDay] = useState("");
   const [token, setToken] = useState("");
   const [showToken, setShowToken] = useState(false);
@@ -223,7 +225,7 @@ export default function ExamPortal() {
       filePath: fileAnswers[question.no_soal]?.path ?? "",
       jawabanPeserta: answers[question.no_soal] || (fileAnswers[question.no_soal] ? `[Berkas: ${fileAnswers[question.no_soal].name}]` : ""),
     }));
-    return JSON.stringify({ namaPeserta: participant.nama_peserta, nip: participant.nip, jabatan: participant.jabatan ?? "", batch: participant.batch ?? "", cabang: participant.cabang ?? "", day, listJawaban });
+    return JSON.stringify({ namaPeserta: participant.nama_peserta, nip: participant.nip, jabatan: participant.jabatan ?? "", batch: participant.batch ?? "", cabang: participant.cabang ?? "", day, jenisTes: examType, listJawaban });
   }
   payloadRef.current = buildExamPayload;
 
@@ -256,6 +258,7 @@ export default function ExamPortal() {
       const form = new FormData();
       form.append("file", file);
       form.append("day", day);
+      form.append("jenis_tes", examType);
       form.append("no_soal", String(noSoal));
       const response = await fetch("/api/cbt?action=upload_jawaban_file", { method: "POST", body: form });
       const result = await response.json();
@@ -320,6 +323,7 @@ export default function ExamPortal() {
     setBusy(true); setError(""); setMessage("");
     try {
       if (!participantTerm.trim()) throw new Error("Masukkan nama lengkap atau NIP kamu.");
+      if (!examType) throw new Error("Pilih pretest atau posttest terlebih dahulu.");
       if (!day) throw new Error("Pilih hari ujian terlebih dahulu.");
       if (!token.trim()) throw new Error("Masukkan token ujian dari trainer.");
 
@@ -338,7 +342,7 @@ export default function ExamPortal() {
       const emailResponse = await fetch("/api/cbt?action=save_peserta_email", { method: "POST", body: emailForm });
       const emailResult = await emailResponse.json(); if (emailResult.status !== "success") throw new Error(emailResult.message || "Email peserta gagal disimpan.");
 
-      const tokenForm = new FormData(); tokenForm.set("day", day); tokenForm.set("token", token.trim()); tokenForm.set("id_peserta", String(found.id));
+      const tokenForm = new FormData(); tokenForm.set("day", day); tokenForm.set("jenis_tes", examType); tokenForm.set("token", token.trim()); tokenForm.set("id_peserta", String(found.id));
       const tokenResponse = await fetch("/api/cbt?action=check_token", { method: "POST", body: tokenForm });
       const tokenResult = await tokenResponse.json(); if (tokenResult.status !== "success") throw new Error(tokenResult.message || "Token tidak valid.");
 
@@ -350,7 +354,7 @@ export default function ExamPortal() {
         return;
       }
 
-      const questionResponse = await fetch(`/api/cbt?action=get_soal&day=${encodeURIComponent(day)}`, { cache: "no-store" });
+      const questionResponse = await fetch(`/api/cbt?action=get_soal&day=${encodeURIComponent(day)}&jenis_tes=${examType}`, { cache: "no-store" });
       const questionResult = await questionResponse.json(); if (questionResult.status !== "success") throw new Error(questionResult.message || "Soal tidak dapat dimuat.");
       finishedRef.current = false;
       setQuestions(questionResult.data); setAnswers({}); setFileAnswers({}); setCurrentIndex(0); setTimeLeft(null); setToast(""); setSubmitted(false);
@@ -385,7 +389,7 @@ export default function ExamPortal() {
   }
 
   function restart() {
-    setParticipantTerm(""); setParticipant(null); setEmail(""); setDay(""); setToken(""); setShowToken(false);
+    setParticipantTerm(""); setParticipant(null); setEmail(""); setExamType(""); setDay(""); setToken(""); setShowToken(false);
     setQuestions([]); setDay5Aspects([]); setAnswers({}); setFileAnswers({}); setUploadingNo(null); setDay5Notes({}); setDay5Scores(Object.fromEntries(day5Fields.map((field) => [field, 5])));
     setCurrentIndex(0); setTimeLeft(null); setToast(""); setSubmitted(false); setError(""); setMessage("");
     finishedRef.current = false; submittingRef.current = false;
@@ -439,7 +443,7 @@ export default function ExamPortal() {
     return (
       <main className="relative min-h-dvh overflow-x-hidden pb-28 text-white lg:pb-10">
         <Background />
-        <PortalHeader step={2} day={day} />
+        <PortalHeader step={2} day={day} examType={examType} />
         <div className="relative z-10 mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:py-8">
           {error && <div className="mb-4"><Alert>{error}</Alert></div>}
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
@@ -537,7 +541,7 @@ export default function ExamPortal() {
     return (
       <main className="relative min-h-dvh overflow-x-hidden pb-16 text-white">
         <Background />
-        <PortalHeader step={2} day={day} />
+        <PortalHeader step={2} day={day} examType={examType} />
         {toast && (
           <div className="fixed left-1/2 top-24 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
             <div className="exam-pop rounded-2xl border border-gold-300/40 bg-[#2b1129]/95 px-4 py-3 text-center text-xs font-semibold text-gold-100 shadow-2xl backdrop-blur">{toast}</div>
@@ -752,7 +756,20 @@ export default function ExamPortal() {
             </div>
 
             <div>
-              <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-rei-900/45"><span className="grid h-5 w-5 place-items-center rounded-full bg-rei-900 text-[10px] text-gold-300">3</span> Hari ujian</p>
+              <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-rei-900/45"><span className="grid h-5 w-5 place-items-center rounded-full bg-rei-900 text-[10px] text-gold-300">3</span> Pilih jenis tes</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(["pretest", "posttest"] as const).map((value) => {
+                  const active = examType === value;
+                  return <button key={value} type="button" aria-pressed={active} onClick={() => setExamType(value)} className={`rounded-xl border px-3 py-3 text-left transition ${active ? "border-rei-900 bg-rei-900 text-gold-200 shadow-md" : "border-rei-900/10 bg-white text-rei-900/60 hover:border-gold-400/60 hover:bg-gold-200/25"}`}>
+                    <span className="block text-sm font-black">{value === "pretest" ? "Pretest" : "Posttest"}</span>
+                    <span className={`mt-0.5 block text-[10px] ${active ? "text-white/60" : "text-rei-900/40"}`}>{value === "pretest" ? "Tes sebelum pelatihan" : "Tes setelah pelatihan"}</span>
+                  </button>;
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-rei-900/45"><span className="grid h-5 w-5 place-items-center rounded-full bg-rei-900 text-[10px] text-gold-300">4</span> Hari ujian</p>
               <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                 {days.map((item, index) => {
                   const active = day === item;
@@ -768,7 +785,7 @@ export default function ExamPortal() {
             </div>
 
             <div>
-              <label htmlFor="token-ujian" className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-rei-900/45"><span className="grid h-5 w-5 place-items-center rounded-full bg-rei-900 text-[10px] text-gold-300">4</span> Token ujian</label>
+              <label htmlFor="token-ujian" className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-rei-900/45"><span className="grid h-5 w-5 place-items-center rounded-full bg-rei-900 text-[10px] text-gold-300">5</span> Token ujian</label>
               <div className="relative">
                 <input id="token-ujian" type={showToken ? "text" : "password"} value={token} onChange={(event) => setToken(event.target.value)} placeholder="Masukkan token dari trainer"
                   autoCapitalize="characters" autoComplete="off" spellCheck={false}

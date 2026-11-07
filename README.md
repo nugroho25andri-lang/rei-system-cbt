@@ -6,8 +6,9 @@ Aplikasi Computer Based Test (CBT) dan penilaian training Raja Emas Indonesia. D
 
 - Portal peserta: input nama/NIP, token ujian, satu soal per layar, soal dan opsi diacak per peserta, timer per soal, auto-submit saat waktu habis atau peserta meninggalkan halaman.
 - Admin: dashboard, jawaban peserta, koreksi, kelola soal, data peserta, rekapitulasi nilai, input nilai AADL, penilaian Day 6.
+- Soal CBT dapat ditandai sebagai pretest atau posttest; keduanya tampil di rekap, tetapi hanya posttest dihitung ke total dan KKM.
 - Superadmin: manajemen akun, log aktivitas admin, dan statistik database.
-- Backup database otomatis setiap Sabtu pukul 00:00 ke `C:\backupdata-cbt_rei`.
+- Backup database otomatis setiap Sabtu pukul 00:00 ke `D:\backup-database`.
 
 ## Persyaratan
 
@@ -49,6 +50,12 @@ mysql -u root -e "CREATE DATABASE IF NOT EXISTS db_cbt_rei CHARACTER SET utf8mb4
 cmd /c "mysql -u root db_cbt_rei < database\schema.sql"
 ```
 
+Untuk database yang sudah ada sebelum fitur pretest/posttest, jalankan migrasi satu kali:
+
+```powershell
+cmd /c "mysql -u root db_cbt_rei < migrations\006_jenis_tes_pre_post.sql"
+```
+
 Buat akun superadmin pertama (ganti password sebelum dipakai):
 
 ```powershell
@@ -71,13 +78,13 @@ Alternatif Windows: klik dua kali `start-cbt.bat` untuk memasang dependency, bui
 Repository ini hanya berisi skema tanpa data peserta/nilai. Untuk memulihkan data produksi:
 
 ```powershell
-Expand-Archive C:\backupdata-cbt_rei\cbt_rei_20261107_000000.zip -DestinationPath C:\backupdata-cbt_rei\restore
-cmd /c "mysql -u root db_cbt_rei < C:\backupdata-cbt_rei\restore\cbt_rei_20261107_000000.sql"
+Expand-Archive D:\backup-database\cbt_rei_20261107_000000.zip -DestinationPath D:\backup-database\restore
+cmd /c "mysql -u root db_cbt_rei < D:\backup-database\restore\cbt_rei_20261107_000000.sql"
 ```
 
 ## Backup otomatis
 
-Backup berjalan setiap **Sabtu pukul 00:00** dan disimpan di `C:\backupdata-cbt_rei` sebagai `cbt_rei_yyyyMMdd_HHmmss.zip`. ZIP berisi dump SQL seluruh tabel. ZIP yang lebih tua dari 90 hari dihapus otomatis, dan setiap backup dicatat di menu **Log Aktivitas**.
+Backup berjalan setiap **Sabtu pukul 00:00** dan disimpan di `D:\backup-database` sebagai `cbt_rei_yyyyMMdd_HHmmss.zip`. ZIP berisi dump SQL seluruh tabel. ZIP yang lebih tua dari 90 hari dihapus otomatis, dan setiap backup dicatat di menu **Log Aktivitas**.
 
 Perintah yang tersedia:
 
@@ -87,7 +94,7 @@ npm run backup:now     # jalankan backup sekarang
 schtasks /Query /TN "CBT REI - Backup Database" /V /FO LIST
 ```
 
-Script backup membaca kredensial dari `.env.local`, mencari `mysqldump.exe` di Laragon/XAMPP/PATH, lalu menulis log ke `C:\backupdata-cbt_rei\backup.log`.
+Script backup membaca kredensial dari `.env.local`, mencari `mysqldump.exe` di Laragon/XAMPP/PATH, lalu menulis log ke `D:\backup-database\backup.log`.
 
 Jika folder project dipindah atau di-clone ulang, jalankan `npm install` atau `npm run setup:backup` lagi agar path task menunjuk ke folder terbaru.
 

@@ -87,10 +87,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     { href: "/rekapitulasi", label: "Rekapitulasi Nilai" },
     { href: "/input-nilai", label: "Input Nilai AADL" },
     { href: "/test-day6", label: "Penilaian Day 6" },
+    ...(session.role === "superadmin" || session.role === "admin" ? [{ href: "/akun", label: "Manajemen Akun" }] : []),
     ...(session.role === "superadmin" ? [
       { href: "/aktivitas", label: "Log Aktivitas" },
       { href: "/database", label: "Database" },
-      { href: "/akun", label: "Manajemen Akun" },
     ] : []),
   ];
   return (

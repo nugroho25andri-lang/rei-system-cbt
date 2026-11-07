@@ -82,7 +82,7 @@ const SECTIONS: { heading: string; items: NavItem[] }[] = [
     items: [
       { label: "Log Aktivitas", href: "/aktivitas", icon: "activity", roles: ["superadmin"] },
       { label: "Database", href: "/database", icon: "database", roles: ["superadmin"] },
-      { label: "Manajemen Akun", href: "/akun", icon: "accounts", roles: ["superadmin"] },
+      { label: "Manajemen Akun", href: "/akun", icon: "accounts", roles: ["superadmin", "admin"] },
     ],
   },
 ];

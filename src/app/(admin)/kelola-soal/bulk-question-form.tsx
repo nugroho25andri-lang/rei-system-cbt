@@ -7,6 +7,7 @@ import { btnDanger, btnGhost, btnPrimary, inputClass, Notice, selectClass } from
 type Draft = {
   key: number;
   day: string;
+  jenis_tes: "pretest" | "posttest";
   no_soal: string;
   jenis_soal: "esai" | "pilihan_ganda";
   bobot: string;
@@ -28,6 +29,7 @@ function newRow(day: string, noSoal: number): Draft {
   return {
     key: nextKey++,
     day,
+    jenis_tes: "posttest",
     no_soal: String(noSoal),
     jenis_soal: "esai",
     bobot: "1",
@@ -95,6 +97,12 @@ export default function BulkQuestionForm({ days, nextNumbers }: { days: string[]
               <label className={label}>Day
                 <select className={selectClass} value={row.day} onChange={(event) => { const day = event.target.value; update(row.key, "day", day); update(row.key, "no_soal", String(nextNoFor(rows, day))); }}>
                   {days.map((day) => <option key={day}>{day}</option>)}
+                </select>
+              </label>
+              <label className={label}>Jenis tes
+                <select className={selectClass} value={row.jenis_tes} onChange={(event) => update(row.key, "jenis_tes", event.target.value)}>
+                  <option value="pretest">Pretest</option>
+                  <option value="posttest">Posttest</option>
                 </select>
               </label>
               <label className={label}>Nomor soal<input className={inputClass} type="number" min="1" value={row.no_soal} onChange={(event) => update(row.key, "no_soal", event.target.value)} required /></label>

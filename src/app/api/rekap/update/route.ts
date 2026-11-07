@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     for (const dayNumber of [1, 2, 3, 4] as const) {
       const target = scores[dayNumber];
       const [answerRows] = await connection.execute(
-        "SELECT jp.id FROM jawaban_peserta jp INNER JOIN soal s ON s.id=jp.id_soal WHERE jp.id_peserta=? AND CAST(REGEXP_SUBSTR(s.day,'[0-9]+') AS UNSIGNED)=? ORDER BY jp.id ASC",
+        "SELECT jp.id FROM jawaban_peserta jp INNER JOIN soal s ON s.id=jp.id_soal WHERE jp.id_peserta=? AND s.jenis_tes='posttest' AND CAST(REGEXP_SUBSTR(s.day,'[0-9]+') AS UNSIGNED)=? ORDER BY jp.id ASC",
         [idPeserta, dayNumber],
       );
       const ids = (answerRows as unknown as Array<{ id: number }>).map((row) => row.id);

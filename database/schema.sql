@@ -1195,6 +1195,7 @@ DROP TABLE IF EXISTS `soal`;
 CREATE TABLE `soal` (
   `id` int NOT NULL AUTO_INCREMENT,
   `day` varchar(50) NOT NULL,
+  `jenis_tes` enum('pretest','posttest') NOT NULL DEFAULT 'posttest',
   `no_soal` int NOT NULL,
   `pertanyaan` text NOT NULL,
   `kata_kunci` text NOT NULL,
@@ -1209,7 +1210,8 @@ CREATE TABLE `soal` (
   `gambar` varchar(255) DEFAULT NULL,
   `video` varchar(255) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `idx_soal_jenis_tes_day` (`jenis_tes`,`day`)
 ) ENGINE=InnoDB AUTO_INCREMENT=115 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

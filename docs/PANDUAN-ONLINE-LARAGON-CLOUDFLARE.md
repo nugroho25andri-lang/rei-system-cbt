@@ -14,7 +14,7 @@ Cocok untuk skala internal, ujian dengan peserta terbatas, dan komputer server y
 6. Tambahkan public hostname `cbt.domainanda.com` -> `http://127.0.0.1:3100`.
 7. Jadikan Next.js dan MySQL service otomatis.
 8. Ubah `COOKIE_SECURE=true`, restart, lalu uji dari HP/komputer lain.
-9. Atur backup otomatis database setiap Sabtu pukul 00:00 ke `C:\backupdata-cbt_rei`.
+9. Atur backup otomatis database setiap Sabtu pukul 00:00 ke `D:\backup-database`.
 10. Uji ulang setelah reboot.
 
 ---
@@ -381,7 +381,7 @@ IP yang tercatat mengikuti header `cf-connecting-ip` / `x-forwarded-for` / `x-re
 
 ## 8. Backup
 
-Proyek ini sudah menyertakan skrip backup database otomatis. Hasil backup berupa satu file ZIP berisi file `.sql`, disimpan di `C:\backupdata-cbt_rei`.
+Proyek ini sudah menyertakan skrip backup database otomatis. Hasil backup berupa satu file ZIP berisi file `.sql`, disimpan di `D:\backup-database`.
 
 ### 8.1 Skrip yang tersedia
 
@@ -410,8 +410,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\backup-db.ps1
 Cek hasilnya:
 
 ```powershell
-Get-ChildItem C:\backupdata-cbt_rei
-Get-Content C:\backupdata-cbt_rei\backup.log -Tail 20
+Get-ChildItem D:\backup-database
+Get-Content D:\backup-database\backup.log -Tail 20
 ```
 
 ### 8.3 Backup otomatis setiap Sabtu 00:00
@@ -439,7 +439,7 @@ $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Saturday -At 12:00AM
 Register-ScheduledTask -TaskName "CBT REI - Backup Database" -Action $action -Trigger $trigger -User "SYSTEM" -RunLevel Highest -Force
 ```
 
-Catatan: akun `SYSTEM` harus bisa membaca `.env.local` dan mengakses `C:\backupdata-cbt_rei`. Jika gagal, gunakan akun Windows khusus server dengan hak akses folder tersebut.
+Catatan: akun `SYSTEM` harus bisa membaca `.env.local` dan mengakses `D:\backup-database`. Jika gagal, gunakan akun Windows khusus server dengan hak akses folder tersebut.
 
 ### 8.4 Retensi dan pemantauan
 
@@ -452,8 +452,8 @@ Catatan: akun `SYSTEM` harus bisa membaca `.env.local` dan mengakses `C:\backupd
 
 ```powershell
 # hentikan aplikasi dulu agar tidak ada penulisan saat restore
-Expand-Archive C:\backupdata-cbt_rei\cbt_rei_20261107_000000.zip -DestinationPath C:\backupdata-cbt_rei\restore -Force
-& "C:\laragon\bin\mysql\mysql-8.4.3-winx64\bin\mysql.exe" -h 127.0.0.1 -u root db_cbt_rei -e "source C:/backupdata-cbt_rei/restore/cbt_rei_20261107_000000.sql"
+Expand-Archive D:\backup-database\cbt_rei_20261107_000000.zip -DestinationPath D:\backup-database\restore -Force
+& "C:\laragon\bin\mysql\mysql-8.4.3-winx64\bin\mysql.exe" -h 127.0.0.1 -u root db_cbt_rei -e "source D:/backup-database/restore/cbt_rei_20261107_000000.sql"
 ```
 
 Uji restore di database percobaan sebelum benar-benar dibutuhkan.
