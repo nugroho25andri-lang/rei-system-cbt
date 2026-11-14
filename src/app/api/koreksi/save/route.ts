@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ success: false, message: "Sesi login habis, silakan login ulang." }, { status: 401 });
 
-  let body: { id_peserta?: number; day?: string; items?: Item[] };
+  let body: { id_peserta?: number; day?: string; jenis_tes?: string; items?: Item[] };
   try {
     body = await request.json();
   } catch {
@@ -19,13 +19,14 @@ export async function POST(request: Request) {
   }
   const idPeserta = Number(body.id_peserta);
   const day = String(body.day ?? "").trim();
+  const jenisTes = String(body.jenis_tes ?? "").trim();
   const items = Array.isArray(body.items) ? body.items : [];
-  if (!Number.isInteger(idPeserta) || idPeserta <= 0 || !day) return NextResponse.json({ success: false, message: "Peserta atau day tidak valid." }, { status: 400 });
+  if (!Number.isInteger(idPeserta) || idPeserta <= 0 || !day || (jenisTes !== "pretest" && jenisTes !== "posttest")) return NextResponse.json({ success: false, message: "Peserta, day, atau jenis tes tidak valid." }, { status: 400 });
   if (!items.length) return NextResponse.json({ success: false, message: "Tidak ada nilai yang dikirim." }, { status: 400 });
 
   const [questionRows] = await db.execute(
-    "SELECT id,bobot FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?))",
-    [day],
+    "SELECT id,bobot FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=?",
+    [day, jenisTes],
   );
   const questions = new Map((questionRows as Array<{ id: number; bobot: number }>).map((row) => [Number(row.id), Number(row.bobot)]));
 
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     session,
     entity: "jawaban_peserta",
     entityId: idPeserta,
-    detail: `${saved} nilai ${day} untuk peserta id ${idPeserta} disimpan lewat popup koreksi.`,
+    detail: `${saved} nilai ${jenisTes} ${day} untuk peserta id ${idPeserta} disimpan lewat popup koreksi.`,
   });
 
   const [summaryRows] = await db.execute(
@@ -90,8 +91,8 @@ export async function POST(request: Request) {
        COALESCE(SUM(s.bobot),0) AS total_bobot
      FROM soal s
      LEFT JOIN jawaban_peserta jp ON jp.id=(SELECT MAX(jp2.id) FROM jawaban_peserta jp2 WHERE jp2.id_soal=s.id AND jp2.id_peserta=?)
-     WHERE LOWER(TRIM(s.day))=LOWER(TRIM(?))`,
-    [idPeserta, day],
+     WHERE LOWER(TRIM(s.day))=LOWER(TRIM(?)) AND s.jenis_tes=?`,
+    [idPeserta, day, jenisTes],
   );
   const summary = (summaryRows as Array<{ total: number; answered: number; corrected: number; total_final: number; total_bobot: number }>)[0];
 

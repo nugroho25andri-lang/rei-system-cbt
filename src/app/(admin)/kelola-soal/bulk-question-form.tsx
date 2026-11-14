@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { addManySoalAction, type BulkState } from "./actions";
 import { btnDanger, btnGhost, btnPrimary, inputClass, Notice, selectClass } from "@/components/ui";
+import { isQuestionDay } from "@/lib/exam-days";
 
 type Draft = {
   key: number;
@@ -76,6 +77,7 @@ export default function BulkQuestionForm({ days, nextNumbers }: { days: string[]
 
   const payload = JSON.stringify(rows.map(({ key, ...row }) => row));
   const questionCount = rows.length;
+  const hasUnsupportedDay = rows.some((row) => !isQuestionDay(row.day));
 
   return (
     <form action={formAction} className="grid gap-4">
@@ -99,12 +101,14 @@ export default function BulkQuestionForm({ days, nextNumbers }: { days: string[]
                   {days.map((day) => <option key={day}>{day}</option>)}
                 </select>
               </label>
-              <label className={label}>Jenis tes
-                <select className={selectClass} value={row.jenis_tes} onChange={(event) => update(row.key, "jenis_tes", event.target.value)}>
-                  <option value="pretest">Pretest</option>
-                  <option value="posttest">Posttest</option>
-                </select>
-              </label>
+              {isQuestionDay(row.day)
+                ? <label className={label}>Jenis tes
+                    <select className={selectClass} value={row.jenis_tes} onChange={(event) => update(row.key, "jenis_tes", event.target.value)}>
+                      <option value="pretest">Pretest</option>
+                      <option value="posttest">Posttest</option>
+                    </select>
+                  </label>
+                : <div className="self-end rounded-lg border border-gold-500/30 bg-gold-200/40 px-3 py-2 text-[11px] leading-relaxed text-rei-900/65">Day 5 menggunakan penilaian praktik, bukan soal pretest/posttest.</div>}
               <label className={label}>Nomor soal<input className={inputClass} type="number" min="1" value={row.no_soal} onChange={(event) => update(row.key, "no_soal", event.target.value)} required /></label>
               <label className={label}>Jenis soal
                 <select className={selectClass} value={row.jenis_soal} onChange={(event) => update(row.key, "jenis_soal", event.target.value)}>
@@ -147,10 +151,11 @@ export default function BulkQuestionForm({ days, nextNumbers }: { days: string[]
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rei-900/10 pt-4">
+        {hasUnsupportedDay && <Notice kind="error">Soal pretest/posttest hanya tersedia untuk Day 1 sampai Day 4. Hapus baris Day 5 atau pilih hari lain.</Notice>}
         <button type="button" onClick={addRow} className={btnGhost}>+ Tambah Baris</button>
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold text-rei-900/50">{questionCount} soal siap disimpan</span>
-          <button type="submit" className={btnPrimary} disabled={pending}>{pending ? "Menyimpan..." : `Simpan ${questionCount} Soal`}</button>
+          <button type="submit" className={btnPrimary} disabled={pending || hasUnsupportedDay}>{pending ? "Menyimpan..." : `Simpan ${questionCount} Soal`}</button>
         </div>
       </div>
     </form>

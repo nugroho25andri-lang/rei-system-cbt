@@ -50,7 +50,7 @@ export async function createAkunAction(form: FormData) {
 }
 
 export async function resetPasswordAkunAction(form: FormData) {
-  const session = await requireRole(["superadmin"]);
+  const session = await requireRole(["superadmin", "admin"]);
   const target = await targetAccount(form);
   const password = String(form.get("password") ?? "").trim();
   if (password.length < 6) redirect("/akun?msg=invalid-password");

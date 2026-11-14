@@ -33,6 +33,11 @@ export default async function AnalisisTrainerPage({ searchParams }: { searchPara
   const strongestCriterion = [...criteria].filter((item) => item.average > 0).sort((a, b) => b.average - a.average)[0];
   const weakestCriterion = [...criteria].filter((item) => item.average > 0).sort((a, b) => a.average - b.average)[0];
   const filterLabel = [analysis.filters.batch ? `Batch ${analysis.filters.batch}` : "Semua batch", analysis.filters.trainer || "Semua trainer"].join(" · ");
+  const exportParams = new URLSearchParams();
+  if (analysis.filters.batch) exportParams.set("batch", analysis.filters.batch);
+  if (analysis.filters.trainer) exportParams.set("trainer", analysis.filters.trainer);
+  const exportQuery = exportParams.toString();
+  const exportHref = `/analisis-trainer/export${exportQuery ? `?${exportQuery}` : ""}`;
 
   return (
     <>
@@ -62,6 +67,7 @@ export default async function AnalisisTrainerPage({ searchParams }: { searchPara
           </label>
           <button type="submit" className={btnPrimary}>Terapkan filter</button>
           {(analysis.filters.batch || analysis.filters.trainer) && <a className="px-2 py-2.5 text-xs font-bold text-gold-600 hover:text-gold-500" href="/analisis-trainer">Reset</a>}
+          <a className={btnPrimary} href={exportHref}>Export Excel</a>
           <span className="ml-auto text-[11px] text-rei-900/45">Data per {formatTanggalShort(analysis.generatedAt)} · {filterLabel}</span>
         </form>
       </Card>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { btnGhost, btnPrimary, inputClass, Notice, Stat, TableWrap, tdClass, thClass } from "@/components/ui";
 
-export type KoreksiRow = { id_peserta: number; nama_peserta: string; nip: string; batch: string; day: string; jumlah: number; dikoreksi: number; berkas: number; skor_auto: number; skor_final: number; total_bobot: number };
+export type KoreksiRow = { id_peserta: number; nama_peserta: string; nip: string; batch: string; day: string; jenis_tes: "pretest" | "posttest"; jumlah: number; dikoreksi: number; berkas: number; skor_auto: number; skor_final: number; total_bobot: number };
 type Peserta = { id: number; nama_peserta: string; nip: string; batch: string; jabatan: string | null; cabang: string | null };
 type Question = {
   id_soal: number; no_soal: number; day: string; pertanyaan: string; bobot: number; jenis_soal: string | null;
@@ -12,7 +12,7 @@ type Question = {
   id_jawaban: number | null; jawaban: string | null; file_path: string | null; skor_auto: number | null; nilai: number | null; is_dikoreksi: number | null; catatan_koreksi: string | null;
 };
 type Summary = { answered: number; corrected: number; total: number; totalFinal: number; totalAuto: number; totalBobot: number };
-type Detail = { peserta: Peserta; day: string; questions: Question[]; summary: Summary };
+type Detail = { peserta: Peserta; day: string; jenis_tes: "pretest" | "posttest"; questions: Question[]; summary: Summary };
 
 function fileUrl(path: string) {
   return `/uploads/${path.replace(/^\/?uploads\//i, "")}`;
@@ -59,7 +59,7 @@ function AttachmentPreview({ path }: { path: string }) {
   );
 }
 
-export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]; initialOpen?: { peserta: number; day?: string } }) {
+export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]; initialOpen?: { peserta: number; day?: string; jenis_tes?: string } }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -80,7 +80,7 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
     if (initialOpen) window.history.replaceState(null, "", "/koreksi");
   }, [initialOpen]);
 
-  const load = useCallback(async (idPeserta: number, day?: string) => {
+  const load = useCallback(async (idPeserta: number, day?: string, jenisTes?: string) => {
     setOpen(true);
     setLoading(true);
     setError("");
@@ -89,6 +89,7 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
     try {
       const params = new URLSearchParams({ peserta: String(idPeserta) });
       if (day) params.set("day", day);
+      if (jenisTes) params.set("jenis_tes", jenisTes);
       const response = await fetch(`/api/koreksi/detail?${params.toString()}`, { cache: "no-store" });
       const data = await response.json() as { success?: boolean; message?: string } & Partial<Detail>;
       if (!response.ok || !data.success || !data.questions) throw new Error(data.message ?? "Gagal memuat detail.");
@@ -102,7 +103,7 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
             : Number(question.nilai) > 0 ? String(question.nilai) : "";
         nextNotes[question.id_soal] = question.catatan_koreksi ?? "";
       }
-      setDetail({ peserta: data.peserta!, day: data.day!, questions: data.questions, summary: data.summary! });
+      setDetail({ peserta: data.peserta!, day: data.day!, jenis_tes: data.jenis_tes!, questions: data.questions, summary: data.summary! });
       setSummary(data.summary!);
       setScores(nextScores);
       setNotes(nextNotes);
@@ -114,8 +115,8 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
   }, []);
 
   useEffect(() => {
-    if (initialOpen?.peserta) void load(initialOpen.peserta, initialOpen.day);
-  }, [initialOpen?.peserta, initialOpen?.day, load]);
+    if (initialOpen?.peserta) void load(initialOpen.peserta, initialOpen.day, initialOpen.jenis_tes);
+  }, [initialOpen?.peserta, initialOpen?.day, initialOpen?.jenis_tes, load]);
 
   useEffect(() => {
     if (!open) return;
@@ -140,7 +141,7 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/koreksi/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id_peserta: detail.peserta.id, day: detail.day, items }) });
+      const response = await fetch("/api/koreksi/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id_peserta: detail.peserta.id, day: detail.day, jenis_tes: detail.jenis_tes, items }) });
       const data = await response.json() as { success?: boolean; message?: string; summary?: Summary };
       if (!response.ok || !data.success) throw new Error(data.message ?? "Gagal menyimpan koreksi.");
       setNotice(data.message ?? "Koreksi berhasil disimpan.");
@@ -156,16 +157,17 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
   return (
     <>
       <TableWrap>
-        <thead className="border-b border-rei-900/10"><tr>{["Peserta", "NIP", "Batch", "Day", "Jawaban", "Auto", "Final", "Status", "Aksi"].map((head) => <th key={head} className={thClass}>{head}</th>)}</tr></thead>
+        <thead className="border-b border-rei-900/10"><tr>{["Peserta", "NIP", "Batch", "Day", "Jenis Tes", "Jawaban", "Auto", "Final", "Status", "Aksi"].map((head) => <th key={head} className={thClass}>{head}</th>)}</tr></thead>
         <tbody className="divide-y divide-rei-900/10">
           {rows.map((row) => {
             const complete = row.dikoreksi >= row.jumlah;
             return (
-              <tr key={`${row.id_peserta}-${row.day}`} className="hover:bg-gold-200/15">
+              <tr key={`${row.id_peserta}-${row.day}-${row.jenis_tes}`} className="hover:bg-gold-200/15">
                 <td className={`${tdClass} font-semibold`}>{row.nama_peserta}</td>
                 <td className={`${tdClass} font-mono text-xs`}>{row.nip}</td>
                 <td className={tdClass}>{row.batch}</td>
                 <td className={`${tdClass} whitespace-nowrap`}>{row.day}</td>
+                <td className={tdClass}><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${row.jenis_tes === "pretest" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700"}`}>{row.jenis_tes === "pretest" ? "Pretest" : "Posttest"}</span></td>
                 <td className={tdClass}>
                   <span className="inline-flex items-center gap-1.5">
                     {row.dikoreksi}/{row.jumlah}
@@ -180,11 +182,11 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
                 <td className={tdClass}>{Number(row.skor_auto)}</td>
                 <td className={`${tdClass} font-bold`}>{Number(row.skor_final)}<span className="text-xs font-normal text-rei-900/40"> / {Number(row.total_bobot)}</span></td>
                 <td className={tdClass}><span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{complete ? "Sudah dikoreksi" : "Menunggu"}</span></td>
-                <td className={tdClass}><button type="button" className={btnGhost} onClick={() => void load(row.id_peserta, row.day)}>Koreksi</button></td>
+                <td className={tdClass}><button type="button" className={btnGhost} onClick={() => void load(row.id_peserta, row.day, row.jenis_tes)}>Koreksi</button></td>
               </tr>
             );
           })}
-          {!rows.length && <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-rei-900/50">Tidak ada jawaban untuk filter ini.</td></tr>}
+          {!rows.length && <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-rei-900/50">Tidak ada jawaban untuk filter ini.</td></tr>}
         </tbody>
       </TableWrap>
 
@@ -195,7 +197,7 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold-500">Koreksi Jawaban</p>
                 <h2 className="truncate text-lg font-extrabold">{detail?.peserta.nama_peserta ?? "Memuat…"}</h2>
-                {detail && <p className="mt-0.5 truncate text-xs text-white/60">{detail.peserta.nip}{detail.peserta.jabatan ? ` · ${detail.peserta.jabatan}` : ""}{detail.peserta.batch ? ` · Batch ${detail.peserta.batch}` : ""} · {detail.day}</p>}
+                {detail && <p className="mt-0.5 truncate text-xs text-white/60">{detail.peserta.nip}{detail.peserta.jabatan ? ` · ${detail.peserta.jabatan}` : ""}{detail.peserta.batch ? ` · Batch ${detail.peserta.batch}` : ""} · {detail.day} · {detail.jenis_tes === "pretest" ? "Pretest" : "Posttest"}</p>}
               </div>
               <button type="button" onClick={close} disabled={saving} className="rounded-lg bg-white/10 p-2 text-white/80 transition hover:bg-white/20 hover:text-white" aria-label="Tutup">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4"><path d="M18 6 6 18M6 6l12 12" /></svg>

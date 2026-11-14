@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { TRAINING_DAYS } from "@/lib/exam-days";
 
 type Participant = { id: number; nama_peserta: string; nip: string; jabatan: string | null; batch: string | null; cabang: string | null; email: string | null };
 type ExamType = "pretest" | "posttest";
@@ -11,7 +12,7 @@ type Day5Aspect = { id: number; kategori: string; nomor: number; aspek_penilaian
 type ExamAnswer = { noSoal: number; jenisSoal: string; bobot: number; skorAuto: number; fileName: string; filePath: string; jawabanPeserta: string };
 type UploadedAnswer = { path: string; name: string; size: number };
 
-const days = ["Day 1", "Day 2", "Day 3", "Day 4", "Day 5"];
+const days = TRAINING_DAYS;
 const day5Fields = ["smiling_voice","intonasi","artikulasi","senyum_eye_contact","body_language","penyambutan_customer","menanyakan_kepemilikan","identitas_usia","rekening_pribadi","pengecekan_barang","pembuatan_invoice","surat_pernyataan","penandatanganan_dokumen","payment","closing"];
 const scoreLabels: Record<number, string> = { 1: "Kurang", 2: "Cukup", 3: "Baik", 4: "Sangat baik", 5: "Luar biasa" };
 
@@ -755,7 +756,9 @@ export default function ExamPortal() {
               <p className="mt-1.5 text-[10px] leading-relaxed text-rei-900/40">Boleh dikosongkan jika emailmu sudah terdaftar.</p>
             </div>
 
-            <div>
+            {day === "Day 5" ? (
+              <Alert kind="info">Day 5 menggunakan penilaian praktik. Pretest dan posttest tersedia untuk Day 1 sampai Day 4.</Alert>
+            ) : <div>
               <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-rei-900/45"><span className="grid h-5 w-5 place-items-center rounded-full bg-rei-900 text-[10px] text-gold-300">3</span> Pilih jenis tes</p>
               <div className="grid grid-cols-2 gap-2">
                 {(["pretest", "posttest"] as const).map((value) => {
@@ -766,7 +769,7 @@ export default function ExamPortal() {
                   </button>;
                 })}
               </div>
-            </div>
+            </div>}
 
             <div>
               <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-rei-900/45"><span className="grid h-5 w-5 place-items-center rounded-full bg-rei-900 text-[10px] text-gold-300">4</span> Hari ujian</p>
@@ -774,7 +777,7 @@ export default function ExamPortal() {
                 {days.map((item, index) => {
                   const active = day === item;
                   return (
-                    <button key={item} type="button" aria-pressed={active} onClick={() => setDay(item)}
+                    <button key={item} type="button" aria-pressed={active} onClick={() => { setDay(item); if (item === "Day 5") setExamType("posttest"); }}
                       className={`rounded-xl border px-1 py-2 text-center transition sm:py-2.5 ${active ? "border-transparent bg-gradient-to-br from-gold-400 to-gold-600 text-rei-900 shadow-lg shadow-gold-600/25" : "border-rei-900/10 bg-white text-rei-900/55 hover:-translate-y-0.5 hover:border-gold-400/60 hover:bg-gold-200/25 hover:text-rei-900"}`}>
                       <span className="block text-[8px] font-black uppercase tracking-widest opacity-60 sm:text-[9px]">Day</span>
                       <span className="block text-lg font-black leading-tight sm:text-xl">{index + 1}</span>

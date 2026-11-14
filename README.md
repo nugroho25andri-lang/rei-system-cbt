@@ -4,9 +4,9 @@ Aplikasi Computer Based Test (CBT) dan penilaian training Raja Emas Indonesia. D
 
 ## Fitur
 
-- Portal peserta: input nama/NIP, token ujian, satu soal per layar, soal dan opsi diacak per peserta, timer per soal, auto-submit saat waktu habis atau peserta meninggalkan halaman.
+- Portal peserta: input nama/NIP, pilih pretest atau posttest, token ujian, satu soal per layar, soal dan opsi diacak per peserta, timer per soal, auto-submit saat waktu habis atau peserta meninggalkan halaman.
 - Admin: dashboard, jawaban peserta, koreksi, kelola soal, data peserta, rekapitulasi nilai, input nilai AADL, penilaian Day 6.
-- Soal CBT dapat ditandai sebagai pretest atau posttest; keduanya tampil di rekap, tetapi hanya posttest dihitung ke total dan KKM.
+- Soal dan koreksi CBT dipisahkan berdasarkan pretest atau posttest; keduanya tampil terpisah di rekap, tetapi hanya posttest dihitung ke total dan KKM.
 - Superadmin: manajemen akun, log aktivitas admin, dan statistik database.
 - Backup database otomatis setiap Sabtu pukul 00:00 ke `D:\backup-database`.
 

@@ -9,6 +9,10 @@ const joins = `
   LEFT JOIN (SELECT j.id_peserta,
     SUM(CASE WHEN s.jenis_tes='pretest' THEN COALESCE(j.nilai,0) ELSE 0 END) nilai_pretest,
     SUM(CASE WHEN s.jenis_tes='posttest' THEN COALESCE(j.nilai,0) ELSE 0 END) nilai_posttest,
+    SUM(CASE WHEN s.jenis_tes='pretest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) pretest1,
+    SUM(CASE WHEN s.jenis_tes='pretest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) pretest2,
+    SUM(CASE WHEN s.jenis_tes='pretest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) pretest3,
+    SUM(CASE WHEN s.jenis_tes='pretest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*4$' THEN COALESCE(j.nilai,0) ELSE 0 END) pretest4,
     SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*1$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes1,
     SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*2$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes2,
     SUM(CASE WHEN s.jenis_tes='posttest' AND TRIM(UPPER(s.day)) REGEXP '^DAY[[:space:]]*3$' THEN COALESCE(j.nilai,0) ELSE 0 END) tes3,
@@ -76,7 +80,7 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
   const filterSql = ` WHERE (?='' OR p.batch=?) AND (?='' OR p.nama_peserta LIKE ? OR p.nip LIKE ?)`;
   const like = `%${q}%`;
   const [rowsResult, batchesResult, countResult, totalResult, failResult, batchCountResult, topResult, bottomResult] = await Promise.all([
-    db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,COALESCE(t14.nilai_pretest,0) nilai_pretest,COALESCE(t14.nilai_posttest,0) nilai_posttest,COALESCE(t14.tes1,0) tes1,COALESCE(t14.tes2,0) tes2,COALESCE(t14.tes3,0) tes3,COALESCE(t14.tes4,0) tes4,COALESCE(d5.nilai_akhir,0) tes5,COALESCE(d6.nilai_akhir,0) tes6,COALESCE(aadl.total_manual,0) nilai_aadl,${totalExpression} total_nilai FROM peserta p ${joins}${filterSql} ORDER BY p.id DESC LIMIT 70 OFFSET ?`, [batch,batch,q,like,like,offset]),
+    db.execute(`SELECT p.id,p.nip,p.nama_peserta,p.jabatan,p.batch,p.cabang,COALESCE(t14.pretest1,0) pretest1,COALESCE(t14.pretest2,0) pretest2,COALESCE(t14.pretest3,0) pretest3,COALESCE(t14.pretest4,0) pretest4,COALESCE(t14.tes1,0) tes1,COALESCE(t14.tes2,0) tes2,COALESCE(t14.tes3,0) tes3,COALESCE(t14.tes4,0) tes4,COALESCE(d5.nilai_akhir,0) tes5,COALESCE(d6.nilai_akhir,0) tes6,COALESCE(aadl.total_manual,0) nilai_aadl,${totalExpression} total_nilai FROM peserta p ${joins}${filterSql} ORDER BY p.id DESC LIMIT 70 OFFSET ?`, [batch,batch,q,like,like,offset]),
     db.execute("SELECT DISTINCT batch FROM peserta WHERE batch IS NOT NULL AND batch<>'' ORDER BY batch DESC"),
     db.execute(`SELECT COUNT(*) total FROM peserta p ${filterSql}`, [batch,batch,q,like,like]),
     db.execute(`SELECT COUNT(*) total, SUM(total_nilai>=?) passed FROM (SELECT p.id,${totalExpression} total_nilai FROM peserta p ${statsJoins}) grades`, [kkm]),
@@ -128,7 +132,7 @@ export default async function RekapitulasiPage({ searchParams }: { searchParams:
       </div>
 
       <Card title={`Rekapitulasi Nilai Peserta (${totalRecords})`} className="mb-6" bodyClassName="px-5 pb-4 pt-2">
-        <RekapTable rows={rows} />
+        <RekapTable rows={rows} kkm={kkm} />
       </Card>
 
       {totalPages > 1 && (

@@ -6,15 +6,15 @@ import { btnPrimary, Card, inputClass, Notice, PageHeader, selectClass, Stat } f
 
 const messages: Record<string, string> = { saved: "Koreksi berhasil disimpan.", empty: "Tidak ada nilai yang diisi.", error: "Gagal menyimpan koreksi.", invalid: "Data koreksi tidak valid." };
 
-export default async function KoreksiPage({ searchParams }: { searchParams: Promise<{ q?: string; batch?: string; day?: string; status?: string; msg?: string; peserta?: string }> }) {
+export default async function KoreksiPage({ searchParams }: { searchParams: Promise<{ q?: string; batch?: string; day?: string; jenis_tes?: string; status?: string; msg?: string; peserta?: string }> }) {
   if (!await getAdminSession()) redirect("/login");
-  const { q = "", batch = "", day = "", status = "", msg, peserta } = await searchParams;
+  const { q = "", batch = "", day = "", jenis_tes: jenisTes = "", status = "", msg, peserta } = await searchParams;
   const [batchesRows, daysRows] = await Promise.all([
     db.execute("SELECT DISTINCT batch FROM peserta WHERE batch IS NOT NULL AND TRIM(batch)<>'' ORDER BY batch"),
     db.execute("SELECT DISTINCT day FROM soal WHERE day IS NOT NULL AND TRIM(day)<>'' ORDER BY CAST(REGEXP_SUBSTR(day,'[0-9]+') AS UNSIGNED),day"),
   ]);
   const [rows] = await db.execute(
-    `SELECT p.id AS id_peserta, p.nama_peserta, p.nip, p.batch, s.day,
+    `SELECT p.id AS id_peserta, p.nama_peserta, p.nip, p.batch, s.day, s.jenis_tes,
        COUNT(DISTINCT jp.id_soal) AS jumlah,
        COUNT(DISTINCT CASE WHEN jp.is_dikoreksi=1 THEN jp.id_soal END) AS dikoreksi,
        SUM(CASE WHEN jp.file_path IS NOT NULL AND TRIM(jp.file_path)<>'' THEN 1 ELSE 0 END) AS berkas,
@@ -27,22 +27,23 @@ export default async function KoreksiPage({ searchParams }: { searchParams: Prom
      WHERE (?='' OR p.nama_peserta LIKE ? OR p.nip LIKE ?)
        AND (?='' OR p.batch=?)
        AND (?='' OR LOWER(TRIM(s.day))=LOWER(TRIM(?)))
-     GROUP BY p.id,p.nama_peserta,p.nip,p.batch,s.day
+       AND (?='' OR s.jenis_tes=?)
+     GROUP BY p.id,p.nama_peserta,p.nip,p.batch,s.day,s.jenis_tes
      HAVING (?='' OR (?='pending' AND dikoreksi<jumlah) OR (?='done' AND dikoreksi>=jumlah))
-     ORDER BY p.nama_peserta ASC, CAST(REGEXP_SUBSTR(s.day,'[0-9]+') AS UNSIGNED), s.day`,
-    [q, `%${q}%`, `%${q}%`, batch, batch, day, day, status, status, status],
+     ORDER BY p.nama_peserta ASC, CAST(REGEXP_SUBSTR(s.day,'[0-9]+') AS UNSIGNED), s.day, s.jenis_tes`,
+    [q, `%${q}%`, `%${q}%`, batch, batch, day, day, jenisTes, jenisTes, status, status, status],
   );
   const list = rows as KoreksiRow[];
   const pending = list.filter((row) => row.dikoreksi < row.jumlah).length;
   const done = list.filter((row) => row.dikoreksi >= row.jumlah).length;
-  const initialOpen = peserta && Number.isInteger(Number(peserta)) && Number(peserta) > 0 ? { peserta: Number(peserta), day: day || undefined } : undefined;
+  const initialOpen = peserta && Number.isInteger(Number(peserta)) && Number(peserta) > 0 ? { peserta: Number(peserta), day: day || undefined, jenis_tes: jenisTes || undefined } : undefined;
   return (
     <>
       <PageHeader title="Koreksi Jawaban" description="Klik Koreksi untuk membuka lembar penilaian. Nilai final langsung tersimpan ke database." />
       {msg && messages[msg] && <Notice kind={msg === "saved" ? "success" : msg === "empty" ? "info" : "error"}>{messages[msg]}</Notice>}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <Stat label="Total Kelompok" value={list.length} hint="Peserta × day" />
+        <Stat label="Total Kelompok Ujian" value={list.length} hint="Peserta × day × jenis tes" />
         <Stat label="Belum Selesai" value={pending} />
         <Stat label="Sudah Dikoreksi" value={done} />
       </div>
@@ -55,6 +56,7 @@ export default async function KoreksiPage({ searchParams }: { searchParams: Prom
             <input className={`${inputClass} max-w-52`} name="q" defaultValue={q} placeholder="Cari nama atau NIP" />
             <select name="batch" defaultValue={batch} className={`${selectClass} max-w-[150px]`}><option value="">Semua batch</option>{(batchesRows[0] as Array<{ batch: string }>).map((row) => <option key={row.batch}>{row.batch}</option>)}</select>
             <select name="day" defaultValue={day} className={`${selectClass} max-w-[140px]`}><option value="">Semua day</option>{(daysRows[0] as Array<{ day: string }>).map((row) => <option key={row.day}>{row.day}</option>)}</select>
+            <select name="jenis_tes" defaultValue={jenisTes} className={`${selectClass} max-w-[150px]`}><option value="">Semua jenis tes</option><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select>
             <select name="status" defaultValue={status} className={`${selectClass} max-w-[150px]`}><option value="">Semua status</option><option value="pending">Belum selesai</option><option value="done">Sudah dikoreksi</option></select>
             <button type="submit" className={btnPrimary}>Filter</button>
           </form>

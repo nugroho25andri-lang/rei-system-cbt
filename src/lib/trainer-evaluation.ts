@@ -447,10 +447,11 @@ function actionFor(tone: TrainerRank["tone"], rank: Pick<TrainerRank, "trainer" 
   return `Pertahankan kualitas mengajar ${rank.trainer} (rata-rata ${rank.average.toFixed(2)}/5). Jadikan praktik terbaiknya sebagai contoh untuk trainer lain.${trendText}`;
 }
 
-export async function getTrainerAnalysis(filter: { batch?: string; trainer?: string } = {}): Promise<TrainerAnalysis> {
+export async function getTrainerAnalysis(filter: { batch?: string; trainer?: string; includeAllSessions?: boolean } = {}): Promise<TrainerAnalysis> {
   await ensureTrainerEvaluationTable();
   const batchFilter = String(filter.batch ?? "").trim();
   const trainerFilter = String(filter.trainer ?? "").trim();
+  const includeAllSessions = filter.includeAllSessions ?? false;
 
   const [allRows] = await db.execute(
     `SELECT id,id_peserta,nip,nama_peserta,batch,trainer,day_ke,tanggal,jam_mulai,jam_selesai,durasi_menit,
@@ -556,7 +557,7 @@ export async function getTrainerAnalysis(filter: { batch?: string; trainer?: str
   const totalMinutes = uniqueMinutes(filtered as Array<{ trainer: string; tanggal: string; jam_mulai: string; jam_selesai: string; durasi_menit: number }>);
   const totalSessions = new Set(filtered.map((row) => `${String(row.trainer ?? "").trim()}|${isoDate(row.tanggal as string)}|${formatJam(String(row.jam_mulai))}|${formatJam(String(row.jam_selesai))}`)).size;
 
-  const sessions = filtered.slice(0, 250).map((row) => ({
+  const sessions = (includeAllSessions ? filtered : filtered.slice(0, 250)).map((row) => ({
     id_peserta: Number(row.id_peserta),
     nip: String(row.nip ?? ""),
     nama_peserta: String(row.nama_peserta ?? ""),

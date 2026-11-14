@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { deleteSoalAction, updateSoalAction } from "./actions";
 import KeywordEditor, { type KeywordDraft } from "@/components/keyword-editor";
 import { btnDanger, btnGhost, btnPrimary, inputClass, selectClass, TableWrap, tdClass, thClass } from "@/components/ui";
+import { isQuestionDay } from "@/lib/exam-days";
 
 export type Question = {
   id: number;
@@ -52,12 +53,14 @@ function typeLabel(value: Question["jenis_soal"]) {
 }
 
 function EditModal({ question, days, onClose }: { question: Question; days: string[]; onClose: () => void }) {
+  const [day, setDay] = useState(question.day);
   const [jenis, setJenis] = useState<"esai" | "pilihan_ganda" | "upload">(question.jenis_soal);
   const [hasImage, setHasImage] = useState(Boolean(question.gambar));
   const [imageName, setImageName] = useState("");
   const [preview, setPreview] = useState<string | null>(question.gambar ? imageSrc(question.gambar) : null);
   const [bobotValue, setBobotValue] = useState(String(question.bobot));
   const [keywords, setKeywords] = useState<KeywordDraft[]>(() => initialKeywords(question));
+  const canSave = isQuestionDay(day) || (question.day === "Day 5" && day === "Day 5");
 
   function pickImage(file: File | undefined) {
     if (preview?.startsWith("blob:")) URL.revokeObjectURL(preview);
@@ -97,8 +100,10 @@ function EditModal({ question, days, onClose }: { question: Question; days: stri
         <form action={updateSoalAction} encType="multipart/form-data" className="grid gap-4 p-5 sm:grid-cols-2">
           <input name="id" type="hidden" value={question.id} />
           <input name="hapus_gambar" type="hidden" value={hasImage ? "0" : "1"} />
-          <label className={label}>Day<select name="day" defaultValue={question.day} className={selectClass}>{days.map((day) => <option key={day}>{day}</option>)}</select></label>
-          <label className={label}>Jenis tes<select name="jenis_tes" defaultValue={question.jenis_tes} className={selectClass}><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select></label>
+          <label className={label}>Day<select name="day" value={day} onChange={(event) => setDay(event.target.value)} className={selectClass}>{days.map((item) => <option key={item}>{item}</option>)}</select></label>
+          {isQuestionDay(day)
+            ? <label className={label}>Jenis tes<select name="jenis_tes" defaultValue={question.jenis_tes} className={selectClass}><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select></label>
+            : <><input type="hidden" name="jenis_tes" value={question.jenis_tes} /><p className="self-end rounded-lg border border-gold-500/30 bg-gold-200/40 px-3 py-2 text-[11px] leading-relaxed text-rei-900/65">Day 5 menggunakan penilaian praktik, bukan soal pretest/posttest.</p></>}
           <label className={label}>Nomor soal<input className={inputClass} name="no_soal" type="number" min="1" defaultValue={question.no_soal} required /></label>
           <label className={label}>Jenis soal<select name="jenis_soal" className={selectClass} value={jenis} onChange={(event) => setJenis(event.target.value as typeof jenis)}><option value="esai">Esai</option><option value="pilihan_ganda">Pilihan ganda</option><option value="upload">Upload file</option></select></label>
           <label className={label}>Bobot<input className={inputClass} name="bobot" type="number" min="1" value={bobotValue} onChange={(event) => setBobotValue(event.target.value)} required /></label>
@@ -146,7 +151,7 @@ function EditModal({ question, days, onClose }: { question: Question; days: stri
 
           <div className="flex items-center justify-end gap-2 border-t border-rei-900/10 pt-4 sm:col-span-2">
             <button type="button" onClick={onClose} className={btnGhost}>Batal</button>
-            <button type="submit" className={btnPrimary}>Simpan Perubahan</button>
+            <button type="submit" className={btnPrimary} disabled={!canSave}>Simpan Perubahan</button>
           </div>
         </form>
       </div>

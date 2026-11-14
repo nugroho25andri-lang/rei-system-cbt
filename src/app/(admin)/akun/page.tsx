@@ -44,7 +44,7 @@ export default async function AkunPage({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <PageHeader title="Manajemen Akun" description={isSuperadmin ? "Buat akun Admin atau HR Staff, atur role, reset password, dan aktifkan/nonaktifkan akun." : "Buat akun Admin atau HR Staff. Pengelolaan akun yang sudah ada hanya dapat dilakukan Super Admin."} />
+      <PageHeader title="Manajemen Akun" description={isSuperadmin ? "Buat akun Admin atau HR Staff, atur role, reset password, dan aktifkan/nonaktifkan akun." : "Buat akun Admin atau HR Staff dan reset password akun Admin/HR Staff. Akun Super Admin tidak dapat diubah."} />
       {msg && messages[msg] && <Notice kind={errorMessages.has(msg) ? "error" : "success"}>{messages[msg]}</Notice>}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -87,10 +87,17 @@ export default async function AkunPage({ searchParams }: { searchParams: Promise
                 <td className={tdClass}><span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${Number(row.is_active) === 1 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{Number(row.is_active) === 1 ? "Aktif" : "Nonaktif"}</span></td>
                 <td className={`${tdClass} whitespace-nowrap text-xs text-rei-900/60`}>{new Date(row.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}</td>
                 <td className={`${tdClass} min-w-[260px]`}>
-                  {!isSuperadmin ? (
-                    <span className="text-[11px] font-bold text-rei-900/45">Pengelolaan akun hanya untuk Super Admin</span>
-                  ) : row.role === "superadmin" ? (
+                  {row.role === "superadmin" ? (
                     <span className="text-[11px] font-bold text-rei-900/45">Akun utama — terkunci</span>
+                  ) : !isSuperadmin ? (
+                    <details className="rounded-lg border border-rei-900/10 bg-[#faf8fa] px-2.5 py-1.5">
+                      <summary className="cursor-pointer text-[11px] font-bold text-rei-900/60">Reset password</summary>
+                      <form action={resetPasswordAkunAction} className="mt-2 flex items-center gap-1.5">
+                        <input type="hidden" name="id" value={row.id} />
+                        <input className={`${inputCompact} max-w-[140px]`} type="text" name="password" required minLength={6} maxLength={255} autoComplete="new-password" placeholder="Password baru" />
+                        <button type="submit" className={smallButton}>Simpan</button>
+                      </form>
+                    </details>
                   ) : (
                     <div className="flex flex-col gap-2">
                       <form action={updateRoleAkunAction} className="flex items-center gap-1.5">

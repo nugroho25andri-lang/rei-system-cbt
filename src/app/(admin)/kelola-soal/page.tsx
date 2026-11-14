@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { TRAINING_DAYS } from "@/lib/exam-days";
 import { requireRole } from "@/lib/session";
 import BulkQuestionForm from "./bulk-question-form";
 import QuestionForm from "./question-form";
@@ -9,6 +10,7 @@ const messages: Record<string, string> = {
   added: "Soal berhasil ditambahkan.",
   updated: "Perubahan soal berhasil disimpan.",
   invalid: "Pertanyaan, nomor soal, bobot wajib benar, dan waktu soal harus 0–86400 detik.",
+  "invalid-day": "Soal pretest/posttest hanya tersedia untuk Day 1 sampai Day 4. Day 5 menggunakan penilaian praktik.",
   "pg-lengkap": "Soal pilihan ganda wajib memiliki pilihan A sampai D.",
   "pg-kunci": "Kunci jawaban pilihan ganda wajib dipilih (A, B, C, atau D).",
   "keyword-bobot": "Total bobot kata kunci tidak boleh melebihi bobot soal.",
@@ -22,9 +24,8 @@ export default async function KelolaSoalPage({ searchParams }: { searchParams: P
   await requireRole(["superadmin", "admin", "hr_staff"]);
   const { q = "", jenis_tes: requestedTestType = "", msg, count } = await searchParams;
   const jenisTes = requestedTestType === "pretest" || requestedTestType === "posttest" ? requestedTestType : "";
-  const [columnRows, daysRows, statsRows, kkmRows, nextRows] = await Promise.all([
+  const [columnRows, statsRows, kkmRows, nextRows] = await Promise.all([
     db.execute("SELECT column_name AS name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='soal' AND column_name IN ('pertanyaan','pertanyaaan')"),
-    db.execute("SELECT DISTINCT day FROM soal WHERE day IS NOT NULL AND TRIM(day)<>'' ORDER BY day"),
     db.execute("SELECT COUNT(*) AS total, SUM(jenis_soal='pilihan_ganda') AS pg, SUM(jenis_soal='upload') AS upload, SUM(gambar IS NOT NULL AND gambar<>'') AS images FROM soal"),
     db.execute("SELECT nilai_kkm FROM kkm LIMIT 1"),
     db.execute("SELECT day, MAX(no_soal) AS max_no FROM soal WHERE day IS NOT NULL GROUP BY day"),
@@ -46,8 +47,7 @@ export default async function KelolaSoalPage({ searchParams }: { searchParams: P
   const uploadQuestions = Number(stats?.upload ?? 0);
   const imageQuestions = Number(stats?.images ?? 0);
   const kkm = Number((kkmRows[0] as Array<{ nilai_kkm: number }>)[0]?.nilai_kkm ?? 675);
-  const days = (daysRows[0] as Array<{ day: string }>).map((row) => row.day);
-  if (!days.length) days.push("Day 1", "Day 2", "Day 3", "Day 4", "Day 5");
+  const days = [...TRAINING_DAYS];
   const nextNumbers: Record<string, number> = {};
   for (const row of nextRows[0] as Array<{ day: string; max_no: number | string }>) {
     nextNumbers[row.day] = Number(row.max_no) + 1;

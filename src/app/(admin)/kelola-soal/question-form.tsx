@@ -3,6 +3,7 @@ import { useState } from "react";
 import { addSoalAction } from "./actions";
 import KeywordEditor, { type KeywordDraft } from "@/components/keyword-editor";
 import { btnPrimary, inputClass, selectClass } from "@/components/ui";
+import { isQuestionDay } from "@/lib/exam-days";
 
 const label = "grid gap-1.5 text-xs font-semibold uppercase tracking-wide text-rei-900/60";
 const toggleBase = "rounded-lg border px-3 py-1.5 text-xs font-bold transition";
@@ -14,6 +15,8 @@ export default function QuestionForm({ days }: { days: string[] }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [bobotValue, setBobotValue] = useState("1");
   const [keywords, setKeywords] = useState<KeywordDraft[]>([{ kata_kunci: "", bobot: "1" }]);
+  const [day, setDay] = useState(days[0] ?? "Day 1");
+  const canAddQuestion = isQuestionDay(day);
 
   function pickImage(file: File | undefined) {
     if (preview) URL.revokeObjectURL(preview);
@@ -28,8 +31,10 @@ export default function QuestionForm({ days }: { days: string[] }) {
 
   return (
     <form action={addSoalAction} encType="multipart/form-data" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      <label className={label}>Day<select name="day" defaultValue={days[0]} className={selectClass}>{days.map((day) => <option key={day}>{day}</option>)}</select></label>
-      <label className={label}>Jenis tes<select name="jenis_tes" defaultValue="posttest" className={selectClass}><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select></label>
+      <label className={label}>Day<select name="day" value={day} onChange={(event) => setDay(event.target.value)} className={selectClass}>{days.map((item) => <option key={item}>{item}</option>)}</select></label>
+      {canAddQuestion
+        ? <label className={label}>Jenis tes<select name="jenis_tes" defaultValue="posttest" className={selectClass}><option value="pretest">Pretest</option><option value="posttest">Posttest</option></select></label>
+        : <><input type="hidden" name="jenis_tes" value="posttest" /><p className="self-end rounded-lg border border-gold-500/30 bg-gold-200/40 px-3 py-2 text-[11px] leading-relaxed text-rei-900/65">Day 5 menggunakan penilaian praktik, bukan soal pretest/posttest.</p></>}
       <label className={label}>Nomor soal<input className={inputClass} name="no_soal" type="number" min="1" defaultValue="1" required /></label>
       <label className={label}>Jenis soal
         <select name="jenis_soal" className={selectClass} value={jenis} onChange={(event) => setJenis(event.target.value as typeof jenis)}>
@@ -91,7 +96,7 @@ export default function QuestionForm({ days }: { days: string[] }) {
       )}
 
       <div className="flex items-center justify-end border-t border-rei-900/10 pt-4 sm:col-span-2 lg:col-span-5">
-        <button type="submit" className={btnPrimary}>Tambah Soal</button>
+        <button type="submit" className={btnPrimary} disabled={!canAddQuestion}>Tambah Soal</button>
       </div>
     </form>
   );

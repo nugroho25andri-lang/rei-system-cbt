@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { logAdminActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
+import { isQuestionDay } from "@/lib/exam-days";
 import { parseKeywordText, type KeywordWeight } from "@/lib/keywords";
 import { QuestionImageException, removeQuestionImage, storeQuestionImage } from "@/lib/question-image";
 import { requireRole } from "@/lib/session";
@@ -21,7 +22,7 @@ async function questionColumn() {
 }
 
 type Normalized =
-  | { error: "invalid" | "invalid-tes" | "pg-lengkap" | "pg-kunci" | "keyword-bobot" }
+  | { error: "invalid" | "invalid-day" | "invalid-tes" | "pg-lengkap" | "pg-kunci" | "keyword-bobot" }
   | { error: ""; day: string; jenisTes: ExamType; noSoal: number; pertanyaan: string; keywords: string; keywordList: KeywordWeight[]; bobot: number; waktuSoal: number; jenis: QuestionType; choices: string[]; answerKey: string };
 
 function normalizeKeywords(input: Record<string, unknown>, bobot: number): KeywordWeight[] {
@@ -34,8 +35,9 @@ function normalizeKeywords(input: Record<string, unknown>, bobot: number): Keywo
   return parseKeywordText(String(input.kata_kunci ?? ""), bobot);
 }
 
-function normalize(input: Record<string, unknown>): Normalized {
+function normalize(input: Record<string, unknown>, allowLegacyDay5 = false): Normalized {
   const day = String(input.day ?? "").trim() || "Day 1";
+  if (!isQuestionDay(day) && !(allowLegacyDay5 && day === "Day 5")) return { error: "invalid-day" };
   const rawExamType = String(input.jenis_tes ?? "posttest").trim();
   if (rawExamType !== "pretest" && rawExamType !== "posttest") return { error: "invalid-tes" };
   const jenisTes: ExamType = rawExamType;
@@ -133,11 +135,13 @@ export async function updateSoalAction(form: FormData) {
   const session = await requireRole(["superadmin", "admin", "hr_staff"]);
   const id = Number(form.get("id"));
   if (!Number.isInteger(id) || id <= 0) redirect("/kelola-soal?msg=invalid");
-  const question = normalize(inputFromForm(form));
+  const [existingRows] = await db.execute("SELECT gambar,day FROM soal WHERE id=? LIMIT 1", [id]);
+  const existing = (existingRows as Array<{ gambar: string | null; day: string }>)[0];
+  if (!existing) redirect("/kelola-soal?msg=invalid");
+  const question = normalize(inputFromForm(form), existing.day === "Day 5");
   if (question.error) redirect(`/kelola-soal?msg=${question.error}`);
 
-  const [existingRows] = await db.execute("SELECT gambar FROM soal WHERE id=? LIMIT 1", [id]);
-  const oldImage = (existingRows as Array<{ gambar: string | null }>)[0]?.gambar ?? null;
+  const oldImage = existing.gambar;
   const uploaded = await readImage(form);
   if (uploaded && ["gambar-tipe", "gambar-ukuran", "gambar-gagal"].includes(uploaded)) redirect(`/kelola-soal?msg=${uploaded}`);
   const removeImage = String(form.get("hapus_gambar") ?? "") === "1";
@@ -169,6 +173,7 @@ export async function updateSoalAction(form: FormData) {
 
 const bulkErrors: Record<string, string> = {
   invalid: "lengkapi pertanyaan, nomor soal, bobot, dan waktu soal (0–86400 detik).",
+  "invalid-day": "soal pretest/posttest hanya tersedia untuk Day 1 sampai Day 4. Day 5 menggunakan penilaian praktik.",
   "invalid-tes": "pilih jenis tes pretest atau posttest.",
   "pg-lengkap": "pilihan A sampai D wajib diisi.",
   "pg-kunci": "kunci jawaban wajib A, B, C, atau D.",

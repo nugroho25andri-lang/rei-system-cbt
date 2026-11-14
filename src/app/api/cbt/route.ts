@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "@/lib/db";
+import { isQuestionDay } from "@/lib/exam-days";
 import { scoreEssay, type KeywordWeight } from "@/lib/keywords";
 import { cookieSecure, getAdminSession } from "@/lib/session";
 import { SignJWT, jwtVerify } from "jose";
@@ -85,6 +86,7 @@ async function handle(request: Request) {
     const participantId = Number(form.get("id_peserta"));
     if (!day) return jsonError("Hari ujian belum dipilih.");
     if (jenisTes !== "pretest" && jenisTes !== "posttest") return jsonError("Pilih pretest atau posttest.");
+    if (day === "Day 5" && jenisTes !== "posttest") return jsonError("Day 5 menggunakan penilaian praktik, bukan pretest/posttest.");
     if (!token) return jsonError("Kode akses / token wajib diisi.");
     if (!Number.isInteger(participantId) || participantId <= 0) return jsonError("Peserta wajib dipilih.");
     const [rows] = await db.execute("SELECT id,day,token_code FROM tokens WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) LIMIT 1", [day]);
@@ -106,6 +108,7 @@ async function handle(request: Request) {
     const jenisTes = (url.searchParams.get("jenis_tes") ?? "").trim();
     if (!day) return jsonError("Parameter day kosong");
     if (jenisTes !== "pretest" && jenisTes !== "posttest") return jsonError("Parameter jenis_tes tidak valid");
+    if (!isQuestionDay(day)) return jsonError("Soal pretest/posttest hanya tersedia untuk Day 1 sampai Day 4.");
     const [rows] = await db.execute("SELECT id,no_soal,pertanyaan,gambar,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=? ORDER BY no_soal ASC", [day, jenisTes]);
     const data = (rows as Array<{ id: number; no_soal: number; pertanyaan: string; gambar: string | null; bobot: number; waktu_soal: number; jenis_soal: string; pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null }>).map((row) => ({ ...row, jenis_soal: row.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : row.jenis_soal === "upload" ? "upload" : "esai", waktu_soal: Number(row.waktu_soal) || 0, gambar: imageUrl(row.gambar) }));
     return data.length ? NextResponse.json({ status: "success", data }) : jsonError(`Tidak ada soal untuk: '${day}'`);
