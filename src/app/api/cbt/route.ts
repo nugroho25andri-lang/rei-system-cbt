@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { db } from "@/lib/db";
 import { isQuestionDay } from "@/lib/exam-days";
 import { scoreEssay, type KeywordWeight } from "@/lib/keywords";
+import { normalizeTableConfig, tableAnswerToPlainText } from "@/lib/table-question";
 import { cookieSecure, getAdminSession } from "@/lib/session";
 import { SignJWT, jwtVerify } from "jose";
 
@@ -109,8 +110,14 @@ async function handle(request: Request) {
     if (!day) return jsonError("Parameter day kosong");
     if (jenisTes !== "pretest" && jenisTes !== "posttest") return jsonError("Parameter jenis_tes tidak valid");
     if (!isQuestionDay(day)) return jsonError("Soal pretest/posttest hanya tersedia untuk Day 1 sampai Day 4.");
-    const [rows] = await db.execute("SELECT id,no_soal,pertanyaan,gambar,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=? ORDER BY no_soal ASC", [day, jenisTes]);
-    const data = (rows as Array<{ id: number; no_soal: number; pertanyaan: string; gambar: string | null; bobot: number; waktu_soal: number; jenis_soal: string; pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null }>).map((row) => ({ ...row, jenis_soal: row.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : row.jenis_soal === "upload" ? "upload" : "esai", waktu_soal: Number(row.waktu_soal) || 0, gambar: imageUrl(row.gambar) }));
+    const [rows] = await db.execute("SELECT id,no_soal,pertanyaan,gambar,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,tabel_config FROM soal WHERE LOWER(TRIM(day))=LOWER(TRIM(?)) AND jenis_tes=? ORDER BY no_soal ASC", [day, jenisTes]);
+    const data = (rows as Array<{ id: number; no_soal: number; pertanyaan: string; gambar: string | null; bobot: number; waktu_soal: number; jenis_soal: string; pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null; tabel_config: string | null }>).map((row) => ({
+      ...row,
+      jenis_soal: row.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : row.jenis_soal === "upload" ? "upload" : row.jenis_soal === "tabel" ? "tabel" : "esai",
+      tabel_config: row.jenis_soal === "tabel" ? normalizeTableConfig(row.tabel_config) : null,
+      waktu_soal: Number(row.waktu_soal) || 0,
+      gambar: imageUrl(row.gambar),
+    }));
     return data.length ? NextResponse.json({ status: "success", data }) : jsonError(`Tidak ada soal untuk: '${day}'`);
   }
 
@@ -239,12 +246,13 @@ async function handle(request: Request) {
       list.push({ kata_kunci: row.kata_kunci, bobot: Number(row.bobot) || 0 });
       keywordMap.set(Number(row.id_soal), list);
     }
-    const questions = new Map<number, { id: number; bobot: number; multipleChoice: boolean; answerKey: string; keywords: KeywordWeight[] }>();
+    const questions = new Map<number, { id: number; bobot: number; jenis: string; multipleChoice: boolean; answerKey: string; keywords: KeywordWeight[] }>();
     for (const row of questionRows as unknown as Array<{ id: number; no_soal: number; bobot: number; jenis_soal: string; jawaban_benar: string | null }>) {
       const id = Number(row.id);
       questions.set(Number(row.no_soal), {
         id,
         bobot: Number(row.bobot) || 0,
+        jenis: row.jenis_soal,
         multipleChoice: row.jenis_soal === "pilihan_ganda",
         answerKey: String(row.jawaban_benar ?? "").trim().toUpperCase(),
         keywords: keywordMap.get(id) ?? [],
@@ -293,7 +301,7 @@ async function handle(request: Request) {
         const score = question.multipleChoice
           ? (selected === question.answerKey ? question.bobot : 0)
           : !filePath && question.keywords.length
-            ? scoreEssay(savedAnswer, question.keywords, question.bobot).score
+            ? scoreEssay(question.jenis === "tabel" ? tableAnswerToPlainText(savedAnswer) : savedAnswer, question.keywords, question.bobot).score
             : 0;
         await connection.execute("INSERT INTO jawaban_peserta (id_peserta,id_soal,jawaban,file_path,skor_auto,nilai,created_at) VALUES (?,?,?,?,?,?,NOW())", [pesertaId, question.id, savedAnswer || null, filePath, score, score]);
       }

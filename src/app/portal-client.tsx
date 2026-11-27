@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import TableAnswerGrid from "@/components/table-answer-grid";
 import { TRAINING_DAYS } from "@/lib/exam-days";
+import { hasTableAnswerContent, normalizeTableConfig, type TableConfig } from "@/lib/table-question";
 
 type Participant = { id: number; nama_peserta: string; nip: string; jabatan: string | null; batch: string | null; cabang: string | null; email: string | null };
 type ExamType = "pretest" | "posttest";
-type Question = { id?: number; no_soal: number; pertanyaan: string; gambar?: string | null; bobot: number; waktu_soal?: number; jenis_soal?: string; pilihan_a?: string | null; pilihan_b?: string | null; pilihan_c?: string | null; pilihan_d?: string | null };
+type Question = { id?: number; no_soal: number; pertanyaan: string; gambar?: string | null; bobot: number; waktu_soal?: number; jenis_soal?: string; pilihan_a?: string | null; pilihan_b?: string | null; pilihan_c?: string | null; pilihan_d?: string | null; tabel_config?: TableConfig | null };
 type PaperOption = { value: string; label: string; text: string };
 type PaperQuestion = Question & { options: PaperOption[] };
 type Day5Aspect = { id: number; kategori: string; nomor: number; aspek_penilaian: string };
@@ -191,7 +193,8 @@ export default function ExamPortal() {
   const inExam = questions.length > 0 && !isDay5;
   const currentQuestion = paper[currentIndex];
   const currentValue = currentQuestion ? (answers[currentQuestion.no_soal] ?? "") : "";
-  const answeredCount = paper.filter((question) => (answers[question.no_soal] ?? "").trim() !== "" || Boolean(fileAnswers[question.no_soal])).length;
+  const isFilled = (q: Question) => q.jenis_soal === "tabel" ? hasTableAnswerContent(answers[q.no_soal]) : ((answers[q.no_soal] ?? "").trim() !== "" || Boolean(fileAnswers[q.no_soal]));
+  const answeredCount = paper.filter(isFilled).length;
   const progress = paper.length ? Math.round((answeredCount / paper.length) * 100) : 0;
   const currentLimit = Number(currentQuestion?.waktu_soal ?? 0) || 0;
   const isLastQuestion = currentIndex >= paper.length - 1;
@@ -536,7 +539,8 @@ export default function ExamPortal() {
 
   /* ---------- Exam (one question at a time) ---------- */
   if (inExam && currentQuestion) {
-    const answeredNow = currentValue.trim() !== "" || Boolean(fileAnswers[currentQuestion.no_soal]);
+    const answeredNow = isFilled(currentQuestion);
+    const currentTableConfig = currentQuestion.jenis_soal === "tabel" ? normalizeTableConfig(currentQuestion.tabel_config) : null;
     const urgent = currentLimit > 0 && (timeLeft ?? currentLimit) <= 10;
     const optionSelected = currentQuestion.jenis_soal === "pilihan_ganda" ? currentValue : "";
     return (
@@ -581,7 +585,7 @@ export default function ExamPortal() {
                   <p className="text-xs font-semibold text-rei-900/55">Bobot {currentQuestion.bobot}{currentLimit > 0 ? ` · ${currentLimit} detik` : " · bebas waktu"}</p>
                 </div>
                 <div className="ml-auto flex items-center gap-2">
-                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${currentQuestion.jenis_soal === "pilihan_ganda" ? "bg-rei-900 text-gold-300" : currentQuestion.jenis_soal === "upload" ? "bg-emerald-100 text-emerald-700" : "bg-rei-100 text-rei-900/60"}`}>{currentQuestion.jenis_soal === "pilihan_ganda" ? "Pilihan ganda" : currentQuestion.jenis_soal === "upload" ? "Upload berkas" : "Esai"}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${currentQuestion.jenis_soal === "pilihan_ganda" ? "bg-rei-900 text-gold-300" : currentQuestion.jenis_soal === "upload" ? "bg-emerald-100 text-emerald-700" : currentQuestion.jenis_soal === "tabel" ? "bg-violet-100 text-violet-700" : "bg-rei-100 text-rei-900/60"}`}>{currentQuestion.jenis_soal === "pilihan_ganda" ? "Pilihan ganda" : currentQuestion.jenis_soal === "upload" ? "Upload berkas" : currentQuestion.jenis_soal === "tabel" ? "Tabel" : "Esai"}</span>
                   <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold ${answeredNow ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                     {answeredNow ? <><CheckIcon className="h-3 w-3" /> Terjawab</> : "Belum dijawab"}
                   </span>
@@ -632,6 +636,15 @@ export default function ExamPortal() {
                     </div>
                     <p className="mt-2 text-[11px] text-rei-900/45">Unggah berkas terlebih dahulu, lalu tekan {isLastQuestion ? "Kirim Jawaban" : "Lanjut"}. Pastikan berkas sudah benar sebelum dikirim.</p>
                   </div>
+                ) : currentQuestion.jenis_soal === "tabel" && currentTableConfig ? (
+                  <div className="mt-5">
+                    <TableAnswerGrid
+                      config={currentTableConfig}
+                      value={currentValue}
+                      editable
+                      onChange={(serialized) => setAnswers((current) => ({ ...current, [currentQuestion.no_soal]: serialized }))}
+                    />
+                  </div>
                 ) : (
                   <div className="mt-5">
                     <textarea rows={6} value={currentValue} onChange={(event) => setAnswers((current) => ({ ...current, [currentQuestion.no_soal]: event.target.value }))}
@@ -666,7 +679,7 @@ export default function ExamPortal() {
                   <p className="mt-2 text-xs text-white/45">{answeredCount} dari {paper.length} soal terjawab</p>
                   <div className="mt-4 grid grid-cols-5 gap-1.5">
                     {paper.map((question, index) => {
-                      const filled = (answers[question.no_soal] ?? "").trim() !== "" || Boolean(fileAnswers[question.no_soal]);
+                      const filled = isFilled(question);
                       const active = index === currentIndex;
                       return (
                         <span key={`${question.no_soal}-${index}`} aria-label={`Soal ${index + 1}${filled ? " terjawab" : ""}`}

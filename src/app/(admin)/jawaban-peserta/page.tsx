@@ -53,7 +53,7 @@ export default async function JawabanPesertaPage({ searchParams }: { searchParam
                 <td className={`${tdClass} font-mono text-xs`}>{row.nip}</td>
                 <td className={tdClass}>{row.batch}</td>
                 <td className={`${tdClass} whitespace-nowrap`}>{row.day}</td>
-                <td className={`${tdClass} max-w-[360px] text-xs text-rei-900/60`}>{row.pratinjau_jawaban}</td>
+                <td className={`${tdClass} max-w-[360px] text-xs text-rei-900/60`}>{row.pratinjau_jawaban.replace(/\{"__type":"table","rows":\[.*?\]\}/g, "[Jawaban Tabel]")}</td>
                 <td className={tdClass}>{Number(row.total_skor_auto ?? 0)}</td>
                 <td className={`${tdClass} font-bold`}>{Number(row.total_skor_final ?? 0)}</td>
                 <td className={tdClass}>

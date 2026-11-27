@@ -8,9 +8,10 @@ import { isQuestionDay } from "@/lib/exam-days";
 import { parseKeywordText, type KeywordWeight } from "@/lib/keywords";
 import { QuestionImageException, removeQuestionImage, storeQuestionImage } from "@/lib/question-image";
 import { requireRole } from "@/lib/session";
+import { normalizeTableConfig, type TableConfig } from "@/lib/table-question";
 
 const CHOICE_FIELDS = ["pilihan_a", "pilihan_b", "pilihan_c", "pilihan_d"] as const;
-type QuestionType = "esai" | "pilihan_ganda" | "upload";
+type QuestionType = "esai" | "pilihan_ganda" | "upload" | "tabel";
 type ExamType = "pretest" | "posttest";
 
 export type BulkState = { ok: boolean; message: string } | null;
@@ -22,8 +23,8 @@ async function questionColumn() {
 }
 
 type Normalized =
-  | { error: "invalid" | "invalid-day" | "invalid-tes" | "pg-lengkap" | "pg-kunci" | "keyword-bobot" }
-  | { error: ""; day: string; jenisTes: ExamType; noSoal: number; pertanyaan: string; keywords: string; keywordList: KeywordWeight[]; bobot: number; waktuSoal: number; jenis: QuestionType; choices: string[]; answerKey: string };
+  | { error: "invalid" | "invalid-day" | "invalid-tes" | "pg-lengkap" | "pg-kunci" | "keyword-bobot" | "tabel-kosong" }
+  | { error: ""; day: string; jenisTes: ExamType; noSoal: number; pertanyaan: string; keywords: string; keywordList: KeywordWeight[]; bobot: number; waktuSoal: number; jenis: QuestionType; choices: string[]; answerKey: string; tableConfig: TableConfig | null };
 
 function normalizeKeywords(input: Record<string, unknown>, bobot: number): KeywordWeight[] {
   if (Array.isArray(input.keyword_list)) {
@@ -45,24 +46,33 @@ function normalize(input: Record<string, unknown>, allowLegacyDay5 = false): Nor
   const pertanyaan = String(input.pertanyaan ?? "").trim();
   const bobot = Math.trunc(Number(input.bobot));
   const waktuSoal = Math.trunc(Number(input.waktu_soal ?? 0));
-  const jenis: QuestionType = input.jenis_soal === "pilihan_ganda" ? "pilihan_ganda" : input.jenis_soal === "upload" ? "upload" : "esai";
+  const jenis: QuestionType =
+    input.jenis_soal === "pilihan_ganda"
+      ? "pilihan_ganda"
+      : input.jenis_soal === "upload"
+        ? "upload"
+        : input.jenis_soal === "tabel"
+          ? "tabel"
+          : "esai";
   const choices = CHOICE_FIELDS.map((field) => String(input[field] ?? "").trim());
   const answerKey = String(input.jawaban_benar ?? "").trim().toUpperCase();
-  const keywordList = jenis === "esai" && Number.isFinite(bobot) && bobot > 0 ? normalizeKeywords(input, bobot) : [];
+  const keywordList = (jenis === "esai" || jenis === "tabel") && Number.isFinite(bobot) && bobot > 0 ? normalizeKeywords(input, bobot) : [];
+  const tableConfig = jenis === "tabel" ? normalizeTableConfig(input.tabel_config) : null;
 
   if (!pertanyaan || !Number.isInteger(noSoal) || noSoal <= 0 || !Number.isInteger(bobot) || bobot <= 0) return { error: "invalid" };
   if (!Number.isInteger(waktuSoal) || waktuSoal < 0 || waktuSoal > 86400) return { error: "invalid" };
   if (jenis === "pilihan_ganda" && choices.some((choice) => !choice)) return { error: "pg-lengkap" };
   if (jenis === "pilihan_ganda" && !["A", "B", "C", "D"].includes(answerKey)) return { error: "pg-kunci" };
+  if (jenis === "tabel" && !tableConfig) return { error: "tabel-kosong" };
   const keywordTotal = keywordList.reduce((sum, item) => sum + item.bobot, 0);
-  if (jenis === "esai" && keywordTotal > bobot + 0.001) return { error: "keyword-bobot" };
+  if ((jenis === "esai" || jenis === "tabel") && keywordTotal > bobot + 0.001) return { error: "keyword-bobot" };
   const keywords = keywordList.map((item) => item.kata_kunci).join(", ");
-  return { error: "", day, jenisTes, noSoal, pertanyaan, keywords, keywordList, bobot, waktuSoal, jenis, choices, answerKey };
+  return { error: "", day, jenisTes, noSoal, pertanyaan, keywords, keywordList, bobot, waktuSoal, jenis, choices, answerKey, tableConfig };
 }
 
 function inputFromForm(form: FormData): Record<string, unknown> {
   const input: Record<string, unknown> = {};
-  for (const field of ["day", "jenis_tes", "no_soal", "pertanyaan", "kata_kunci", "bobot", "waktu_soal", "jenis_soal", "jawaban_benar", ...CHOICE_FIELDS]) {
+  for (const field of ["day", "jenis_tes", "no_soal", "pertanyaan", "kata_kunci", "bobot", "waktu_soal", "jenis_soal", "jawaban_benar", "tabel_config", ...CHOICE_FIELDS]) {
     input[field] = form.get(field);
   }
   const names = form.getAll("kata_kunci[]").map((value) => String(value).trim());
@@ -80,12 +90,13 @@ function params(question: Extract<Normalized, { error: "" }>, gambar: string | n
     question.jenisTes,
     question.noSoal,
     question.pertanyaan,
-    question.jenis === "esai" ? question.keywords : "",
+    question.jenis === "esai" || question.jenis === "tabel" ? question.keywords : "",
     question.bobot,
     question.waktuSoal,
     question.jenis,
     ...(question.jenis === "pilihan_ganda" ? question.choices : [null, null, null, null]),
     question.jenis === "pilihan_ganda" ? question.answerKey : null,
+    question.jenis === "tabel" && question.tableConfig ? JSON.stringify(question.tableConfig) : null,
     gambar,
   ];
 }
@@ -115,7 +126,7 @@ export async function addSoalAction(form: FormData) {
   if (gambar && ["gambar-tipe", "gambar-ukuran", "gambar-gagal"].includes(gambar)) redirect(`/kelola-soal?msg=${gambar}`);
   const column = await questionColumn();
   const [result] = await db.execute(
-    `INSERT INTO soal (day,jenis_tes,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO soal (day,jenis_tes,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,tabel_config,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     params(question, gambar),
   );
   const insertedId = Number((result as { insertId?: number }).insertId ?? 0);
@@ -156,7 +167,7 @@ export async function updateSoalAction(form: FormData) {
 
   const column = await questionColumn();
   await db.execute(
-    `UPDATE soal SET day=?,jenis_tes=?,no_soal=?,\`${column}\`=?,kata_kunci=?,bobot=?,waktu_soal=?,jenis_soal=?,pilihan_a=?,pilihan_b=?,pilihan_c=?,pilihan_d=?,jawaban_benar=?,gambar=? WHERE id=?`,
+    `UPDATE soal SET day=?,jenis_tes=?,no_soal=?,\`${column}\`=?,kata_kunci=?,bobot=?,waktu_soal=?,jenis_soal=?,pilihan_a=?,pilihan_b=?,pilihan_c=?,pilihan_d=?,jawaban_benar=?,tabel_config=?,gambar=? WHERE id=?`,
     [...params(question, gambar), id],
   );
   await replaceKeywords(db, id, question.keywordList);
@@ -178,6 +189,7 @@ const bulkErrors: Record<string, string> = {
   "pg-lengkap": "pilihan A sampai D wajib diisi.",
   "pg-kunci": "kunci jawaban wajib A, B, C, atau D.",
   "keyword-bobot": "total bobot kata kunci tidak boleh melebihi bobot soal.",
+  "tabel-kosong": "soal tabel wajib memiliki minimal satu kolom.",
 };
 
 export async function addManySoalAction(_previous: BulkState, form: FormData): Promise<BulkState> {
@@ -205,7 +217,7 @@ export async function addManySoalAction(_previous: BulkState, form: FormData): P
     await connection.beginTransaction();
     for (const question of questions) {
       const [inserted] = await connection.execute(
-        `INSERT INTO soal (day,jenis_tes,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO soal (day,jenis_tes,no_soal,\`${column}\`,kata_kunci,bobot,waktu_soal,jenis_soal,pilihan_a,pilihan_b,pilihan_c,pilihan_d,jawaban_benar,tabel_config,gambar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         params(question, null),
       );
       const keywordQuestionId = Number((inserted as { insertId?: number }).insertId ?? 0);

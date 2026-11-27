@@ -24,6 +24,7 @@ function barTone(value: number) {
 function typeLabel(value: string) {
   if (value === "pilihan_ganda") return "PG";
   if (value === "upload") return "Upload";
+  if (value === "tabel") return "Tabel";
   return "Esai";
 }
 

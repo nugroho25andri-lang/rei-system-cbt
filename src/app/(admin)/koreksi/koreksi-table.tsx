@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import TableAnswerGrid from "@/components/table-answer-grid";
 import { btnGhost, btnPrimary, inputClass, Notice, Stat, TableWrap, tdClass, thClass } from "@/components/ui";
+import { normalizeTableConfig } from "@/lib/table-question";
 
 export type KoreksiRow = { id_peserta: number; nama_peserta: string; nip: string; batch: string; day: string; jenis_tes: "pretest" | "posttest"; jumlah: number; dikoreksi: number; berkas: number; skor_auto: number; skor_final: number; total_bobot: number };
 type Peserta = { id: number; nama_peserta: string; nip: string; batch: string; jabatan: string | null; cabang: string | null };
 type Question = {
   id_soal: number; no_soal: number; day: string; pertanyaan: string; bobot: number; jenis_soal: string | null;
-  pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null; jawaban_benar: string | null; kata_kunci: string | null; kata_kunci_bobot: string | null;
+  pilihan_a: string | null; pilihan_b: string | null; pilihan_c: string | null; pilihan_d: string | null; jawaban_benar: string | null; tabel_config: string | null; kata_kunci: string | null; kata_kunci_bobot: string | null;
   id_jawaban: number | null; jawaban: string | null; file_path: string | null; skor_auto: number | null; nilai: number | null; is_dikoreksi: number | null; catatan_koreksi: string | null;
 };
 type Summary = { answered: number; corrected: number; total: number; totalFinal: number; totalAuto: number; totalBobot: number };
@@ -222,13 +224,15 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
                   <div className="space-y-3">
                     {detail.questions.map((question, index) => {
                       const isMcq = question.jenis_soal === "pilihan_ganda";
+                      const isTable = question.jenis_soal === "tabel";
+                      const tableConfig = isTable ? normalizeTableConfig(question.tabel_config) : null;
                       const selected = (question.jawaban ?? "").trim().toUpperCase();
                       const isCorrect = isMcq && selected && selected === (question.jawaban_benar ?? "").toUpperCase();
                       return (
                         <section key={question.id_soal} className={`rounded-xl border bg-white p-4 shadow-sm ${Number(question.is_dikoreksi) === 1 ? "border-emerald-200" : "border-rei-900/10"}`}>
                           <div className="mb-2 flex flex-wrap items-center gap-2">
                             <span className="grid h-6 min-w-6 place-items-center rounded-md bg-rei-900 px-1.5 text-[11px] font-extrabold text-gold-400">{index + 1}</span>
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isMcq ? "bg-gold-200 text-gold-600" : "bg-rei-100 text-rei-900/70"}`}>{isMcq ? "Pilihan ganda" : "Esai"}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${isMcq ? "bg-gold-200 text-gold-600" : isTable ? "bg-violet-100 text-violet-700" : question.jenis_soal === "upload" ? "bg-emerald-100 text-emerald-700" : "bg-rei-100 text-rei-900/70"}`}>{isMcq ? "Pilihan ganda" : isTable ? "Tabel" : question.jenis_soal === "upload" ? "Upload" : "Esai"}</span>
                             <span className="text-[11px] text-rei-900/45">No. {question.no_soal} · Bobot {question.bobot}</span>
                             {Number(question.is_dikoreksi) === 1 && <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Sudah dinilai</span>}
                             {question.id_jawaban === null && <span className="ml-auto rounded-full bg-rei-100 px-2 py-0.5 text-[10px] font-bold text-rei-900/50">Tidak dijawab</span>}
@@ -249,7 +253,7 @@ export default function KoreksiTable({ rows, initialOpen }: { rows: KoreksiRow[]
 
                           <div className="mt-2 rounded-lg bg-[#faf8fa] p-2.5">
                             <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wide text-rei-900/40">Jawaban peserta</p>
-                            {question.jawaban ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-rei-900/85">{question.jawaban}</p> : <p className="text-sm italic text-rei-900/35">{question.file_path ? "Jawaban berupa berkas — lihat lampiran di bawah." : "Tidak ada jawaban."}</p>}
+                            {isTable && tableConfig ? (question.jawaban ? <TableAnswerGrid config={tableConfig} value={question.jawaban} editable={false} compact /> : <p className="text-sm italic text-rei-900/35">Tidak ada jawaban tabel.</p>) : question.jawaban ? <p className="whitespace-pre-wrap text-sm leading-relaxed text-rei-900/85">{question.jawaban}</p> : <p className="text-sm italic text-rei-900/35">{question.file_path ? "Jawaban berupa berkas — lihat lampiran di bawah." : "Tidak ada jawaban."}</p>}
                             {question.file_path && <AttachmentPreview path={question.file_path} />}
                             {isMcq && question.id_jawaban !== null && <p className={`mt-1 text-[11px] font-bold ${isCorrect ? "text-emerald-700" : "text-rose-700"}`}>{isCorrect ? "Sesuai kunci." : "Tidak sesuai kunci."}</p>}
                             {!isMcq && (question.kata_kunci_bobot || question.kata_kunci) && <p className="mt-1 text-[11px] text-rei-900/50"><b>Kata kunci:</b> {question.kata_kunci_bobot || question.kata_kunci}</p>}

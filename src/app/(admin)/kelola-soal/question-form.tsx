@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { addSoalAction } from "./actions";
 import KeywordEditor, { type KeywordDraft } from "@/components/keyword-editor";
+import TableBuilder from "@/components/table-builder";
 import { btnPrimary, inputClass, selectClass } from "@/components/ui";
 import { isQuestionDay } from "@/lib/exam-days";
 
@@ -9,7 +10,7 @@ const label = "grid gap-1.5 text-xs font-semibold uppercase tracking-wide text-r
 const toggleBase = "rounded-lg border px-3 py-1.5 text-xs font-bold transition";
 
 export default function QuestionForm({ days }: { days: string[] }) {
-  const [jenis, setJenis] = useState<"esai" | "pilihan_ganda" | "upload">("esai");
+  const [jenis, setJenis] = useState<"esai" | "tabel" | "pilihan_ganda" | "upload">("esai");
   const [hasImage, setHasImage] = useState(false);
   const [imageName, setImageName] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
@@ -38,7 +39,8 @@ export default function QuestionForm({ days }: { days: string[] }) {
       <label className={label}>Nomor soal<input className={inputClass} name="no_soal" type="number" min="1" defaultValue="1" required /></label>
       <label className={label}>Jenis soal
         <select name="jenis_soal" className={selectClass} value={jenis} onChange={(event) => setJenis(event.target.value as typeof jenis)}>
-          <option value="esai">Esai</option>
+          <option value="esai">Esai (Teks)</option>
+          <option value="tabel">Tabel / Kolom (Excel)</option>
           <option value="pilihan_ganda">Pilihan ganda</option>
           <option value="upload">Upload file (Excel/PDF/PNG)</option>
         </select>
@@ -47,6 +49,19 @@ export default function QuestionForm({ days }: { days: string[] }) {
       <label className={label}>Waktu soal (detik)<input className={inputClass} name="waktu_soal" type="number" min="0" max="86400" defaultValue="0" title="0 = tanpa batas waktu" required /></label>
       <label className={`${label} sm:col-span-2 lg:col-span-5`}>Pertanyaan<textarea className={inputClass} name="pertanyaan" rows={3} required /></label>
       <p className="text-[11px] text-rei-900/45 sm:col-span-2 lg:col-span-5">Isi waktu dalam detik untuk membatasi tiap soal (contoh: 90). Isi 0 bila soal tanpa batas waktu.</p>
+
+      {(jenis === "esai" || jenis === "tabel") && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rei-900/10 bg-[#faf8fa] px-3.5 py-2.5 sm:col-span-2 lg:col-span-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-rei-900/65">Format Jawaban Peserta</p>
+            <p className="text-[11px] text-rei-900/45">Pilih apakah peserta menjawab dengan esai teks biasa atau mengisi tabel kolom seperti Excel.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" aria-pressed={jenis === "esai"} onClick={() => setJenis("esai")} className={`${toggleBase} ${jenis === "esai" ? "border-rei-900 bg-rei-900 text-gold-300" : "border-rei-900/15 bg-white text-rei-900/60 hover:border-gold-400"}`}>Esai (Tanpa Tabel)</button>
+            <button type="button" aria-pressed={jenis === "tabel"} onClick={() => setJenis("tabel")} className={`${toggleBase} ${jenis === "tabel" ? "border-rei-900 bg-rei-900 text-gold-300" : "border-rei-900/15 bg-white text-rei-900/60 hover:border-gold-400"}`}>Buat Tabel (Seperti Excel)</button>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-rei-900/10 bg-[#faf8fa] p-3.5 sm:col-span-2 lg:col-span-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -86,6 +101,12 @@ export default function QuestionForm({ days }: { days: string[] }) {
       {jenis === "esai" && (
         <div className="sm:col-span-2 lg:col-span-5">
           <KeywordEditor rows={keywords} onChange={setKeywords} bobot={Number(bobotValue) || 0} />
+        </div>
+      )}
+
+      {jenis === "tabel" && (
+        <div className="sm:col-span-2 lg:col-span-5">
+          <TableBuilder />
         </div>
       )}
 

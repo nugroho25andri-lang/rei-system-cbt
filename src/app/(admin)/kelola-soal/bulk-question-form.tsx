@@ -2,15 +2,17 @@
 
 import { useActionState, useState } from "react";
 import { addManySoalAction, type BulkState } from "./actions";
+import TableBuilder from "@/components/table-builder";
 import { btnDanger, btnGhost, btnPrimary, inputClass, Notice, selectClass } from "@/components/ui";
 import { isQuestionDay } from "@/lib/exam-days";
+import { SIMPLE_TABLE_PRESET } from "@/lib/table-question";
 
 type Draft = {
   key: number;
   day: string;
   jenis_tes: "pretest" | "posttest";
   no_soal: string;
-  jenis_soal: "esai" | "pilihan_ganda";
+  jenis_soal: "esai" | "pilihan_ganda" | "tabel";
   bobot: string;
   waktu_soal: string;
   pertanyaan: string;
@@ -20,6 +22,7 @@ type Draft = {
   pilihan_c: string;
   pilihan_d: string;
   jawaban_benar: string;
+  tabel_config: string;
 };
 
 const label = "grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-rei-900/55";
@@ -42,6 +45,7 @@ function newRow(day: string, noSoal: number): Draft {
     pilihan_c: "",
     pilihan_d: "",
     jawaban_benar: "A",
+    tabel_config: JSON.stringify(SIMPLE_TABLE_PRESET),
   };
 }
 
@@ -113,6 +117,7 @@ export default function BulkQuestionForm({ days, nextNumbers }: { days: string[]
               <label className={label}>Jenis soal
                 <select className={selectClass} value={row.jenis_soal} onChange={(event) => update(row.key, "jenis_soal", event.target.value)}>
                   <option value="esai">Esai</option>
+                  <option value="tabel">Tabel / Kolom (Excel)</option>
                   <option value="pilihan_ganda">Pilihan ganda</option>
                 </select>
               </label>
@@ -140,6 +145,15 @@ export default function BulkQuestionForm({ days, nextNumbers }: { days: string[]
                     </select>
                   </label>
                 </>
+              ) : row.jenis_soal === "tabel" ? (
+                <div className="sm:col-span-2 lg:col-span-5">
+                  <TableBuilder
+                    name=""
+                    compact
+                    initialConfig={row.tabel_config}
+                    onChange={(json) => update(row.key, "tabel_config", json)}
+                  />
+                </div>
               ) : (
                 <label className={`${label} sm:col-span-2 lg:col-span-5`}>Kata kunci
                   <input className={inputClass} value={row.kata_kunci} onChange={(event) => update(row.key, "kata_kunci", event.target.value)} placeholder="Pisahkan dengan koma, mis. materai:3, nota:2, tanggal. Tanpa bobot = dibagi rata." />
